@@ -187,6 +187,54 @@ data/dev-store.json
 
 Set `ALLOW_DEV_FILE_STORE=false` if you want local development to require PostgreSQL.
 
+## Auto Start On Windows
+
+For local development without Docker, install a Windows Scheduled Task:
+
+```powershell
+.\scripts\windows\install-dev-autostart.ps1
+Start-ScheduledTask -TaskName "Local POS Dev Server"
+```
+
+If Windows denies permission for Scheduled Task, use a Startup folder shortcut instead:
+
+```powershell
+.\scripts\windows\install-startup-shortcut.ps1
+```
+
+The dev server will listen on all LAN interfaces:
+
+```text
+http://<computer-ip>:3000
+```
+
+Logs are written to:
+
+```text
+data/logs/auto-dev-server.log
+```
+
+Remove the dev auto-start task:
+
+```powershell
+.\scripts\windows\uninstall-dev-autostart.ps1
+```
+
+Remove the Startup folder shortcut:
+
+```powershell
+.\scripts\windows\uninstall-startup-shortcut.ps1
+```
+
+For production with Docker, install Docker Desktop, enable Docker Desktop startup with Windows, then run once:
+
+```powershell
+docker compose up -d
+.\scripts\windows\install-docker-autostart.ps1
+```
+
+The compose services already use `restart: unless-stopped`, so they will keep coming back after container restarts.
+
 ## Migration From Supabase
 
 1. Export Supabase public schema with `pg_dump`.
