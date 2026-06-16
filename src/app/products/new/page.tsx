@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import ImageUpload from '@/components/ImageUpload';
@@ -42,6 +42,13 @@ export default function NewProductPage() {
   function setField(key: keyof FormState, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
+
+  const suggestedCategories = useMemo(() => {
+    const needle = form.category.trim().toLowerCase();
+    const sorted = [...categories].sort((a, b) => a.localeCompare(b));
+    if (!needle) return sorted.slice(0, 12);
+    return sorted.filter((category) => category.toLowerCase().includes(needle)).slice(0, 12);
+  }, [categories, form.category]);
 
   async function save() {
     setBusy(true);
@@ -135,6 +142,47 @@ export default function NewProductPage() {
                 <option key={category} value={category} />
               ))}
             </datalist>
+            {categories.length ? (
+              <div className="mt-2 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-zinc-500">Existing categories</span>
+                  {form.category ? (
+                    <button
+                      type="button"
+                      onClick={() => setField('category', '')}
+                      className="text-xs text-blue-600 hover:underline dark:text-blue-400"
+                    >
+                      Clear
+                    </button>
+                  ) : null}
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {suggestedCategories.length ? (
+                    suggestedCategories.map((category) => {
+                      const active = form.category.trim() === category;
+                      return (
+                        <button
+                          key={category}
+                          type="button"
+                          onClick={() => setField('category', category)}
+                          className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-sm ${
+                            active
+                              ? 'border-blue-600 bg-blue-600 text-white'
+                              : 'border-zinc-300 bg-zinc-100 text-zinc-700 hover:bg-zinc-200 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800'
+                          }`}
+                        >
+                          {category}
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <span className="text-xs text-zinc-500">No matching category. Type a new one.</span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-1 text-xs text-zinc-500">Type a new category.</div>
+            )}
           </label>
 
           <div className="grid gap-3 sm:grid-cols-3">
