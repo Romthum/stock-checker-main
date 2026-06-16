@@ -20,6 +20,21 @@ type MenuTileProps = {
   tone?: 'default' | 'danger';
 };
 
+const BRAND_NAME = 'Peak World Toy';
+const LOGO_SRC = '/logo.png';
+
+function BrandLogo({ compact = false }: { compact?: boolean }) {
+  return (
+    <div
+      className={`relative shrink-0 overflow-hidden rounded-xl bg-white ring-1 ring-zinc-200 dark:ring-zinc-800 ${
+        compact ? 'h-16 w-16 p-1' : 'mx-auto h-32 w-32 p-2'
+      }`}
+    >
+      <Image src={LOGO_SRC} alt={BRAND_NAME} fill priority sizes={compact ? '64px' : '128px'} className="object-contain" />
+    </div>
+  );
+}
+
 function MenuTile({ title, subtitle, image, href, onClick, tone = 'default' }: MenuTileProps) {
   const content = (
     <>
@@ -113,8 +128,9 @@ export default function Home() {
   if (!user) {
     return (
       <div className="mx-auto mt-10 max-w-md space-y-5">
-        <div className="text-center">
-          <h1 className="text-2xl font-semibold">Local POS</h1>
+        <div className="space-y-3 text-center">
+          <BrandLogo />
+          <h1 className="text-2xl font-semibold">{BRAND_NAME}</h1>
           <p className="mt-1 text-sm text-zinc-500">Sign in to manage sales and inventory.</p>
         </div>
 
@@ -153,11 +169,14 @@ export default function Home() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-semibold">Local POS</h1>
-          <p className="text-sm text-zinc-500">
-            {user.display_name} ({role})
-          </p>
+        <div className="flex items-center gap-3">
+          <BrandLogo compact />
+          <div>
+            <h1 className="text-3xl font-semibold">{BRAND_NAME}</h1>
+            <p className="text-sm text-zinc-500">
+              {user.display_name} ({role})
+            </p>
+          </div>
         </div>
       </div>
 
