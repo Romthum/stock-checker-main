@@ -170,6 +170,18 @@ npm run db:create-admin
 npm run dev
 ```
 
+For phones or tablets on the same LAN, run the dev server on all network interfaces:
+
+```powershell
+npm run dev:lan
+```
+
+Show the LAN URL to open from another device:
+
+```powershell
+npm run lan:url
+```
+
 If PostgreSQL is not running yet, development mode allows a temporary fallback owner login:
 
 ```text
