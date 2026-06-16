@@ -15,10 +15,14 @@ export type AuthUser = {
 
 export const SESSION_COOKIE = 'pos_session';
 export const DEV_FALLBACK_USER_ID = '00000000-0000-4000-8000-000000000001';
+const DEV_AUTH_SECRET = 'local-development-auth-secret-change-before-production';
 const SESSION_DAYS = Number(process.env.SESSION_DAYS ?? 7);
 
 function getSecret() {
   const secret = process.env.AUTH_SECRET;
+  if ((!secret || secret.length < 32) && process.env.NODE_ENV !== 'production') {
+    return new TextEncoder().encode(DEV_AUTH_SECRET);
+  }
   if (!secret || secret.length < 32) {
     throw new Error('AUTH_SECRET must be set and at least 32 characters long');
   }

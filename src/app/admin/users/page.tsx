@@ -41,6 +41,7 @@ export default function UsersPage() {
   const { role, loading } = useRole();
   const [users, setUsers] = useState<UserRow[]>([]);
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [newRole, setNewRole] = useState<Role>('STAFF');
   const [tempPassword, setTempPassword] = useState('');
@@ -71,6 +72,11 @@ export default function UsersPage() {
       setMessage('Please enter a valid email address.');
       return;
     }
+    const newPassword = password.trim();
+    if (newPassword.length < 8) {
+      setMessage('Please enter a password with at least 8 characters.');
+      return;
+    }
     setBusy(true);
     setMessage('');
     setTempPassword('');
@@ -80,6 +86,7 @@ export default function UsersPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: normalizedEmail,
+          password: newPassword,
           display_name: displayName.trim() || normalizedEmail,
           role: newRole,
         }),
@@ -87,7 +94,9 @@ export default function UsersPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(getApiError(json, 'Create failed'));
       setEmail('');
+      setPassword('');
       setDisplayName('');
+      setMessage('User saved. They can sign in with the password you set.');
       setTempPassword(json.tempPassword ?? '');
       await load();
     } catch (err) {
@@ -157,17 +166,25 @@ export default function UsersPage() {
 
       {canEdit ? (
         <div className="card space-y-3 p-4">
-          <div className="font-medium">Create or reset staff account</div>
-          <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto_auto]">
+          <div className="font-medium">Create staff account</div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto_auto]">
             <input
               type="email"
-              placeholder="email"
+              placeholder="Email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
             />
             <input
-              placeholder="display name"
+              type="password"
+              placeholder="Password, at least 8 characters"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+              className="rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
+            />
+            <input
+              placeholder="Display name"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               className="rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
@@ -185,7 +202,7 @@ export default function UsersPage() {
             </select>
             <button
               onClick={createUser}
-              disabled={busy || !email}
+              disabled={busy || !email || password.trim().length < 8}
               className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-500 disabled:opacity-60"
             >
               Save

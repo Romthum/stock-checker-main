@@ -14,7 +14,7 @@ function getPrivateLanOrigins() {
 const nextConfig: NextConfig = {
   output: "standalone",
   reactStrictMode: true,
-  allowedDevOrigins: getPrivateLanOrigins(),
+  allowedDevOrigins: ["localhost", "127.0.0.1", ...getPrivateLanOrigins()],
   images: {
     remotePatterns: [
       {
