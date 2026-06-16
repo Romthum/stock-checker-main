@@ -28,9 +28,16 @@ Add-Type -AssemblyName System.Drawing
 $script:ProjectDir = (Resolve-Path $ProjectDir).Path
 $script:Port = $Port
 $script:LogDir = Join-Path $script:ProjectDir "data\logs"
+$script:ConfigPath = Join-Path $script:ProjectDir "data\control-panel-settings.json"
 $script:PanelLogPath = Join-Path $script:LogDir "control-panel.log"
 $script:CurrentLanUrl = $null
 $script:LastLogPath = $null
+$script:LastKnownServerState = $null
+$script:LastKnownLanUrl = $null
+$script:LastAlertSignature = $null
+$script:LastAlertAt = $null
+$script:ValidateOnlyMode = [bool]$ValidateOnly
+$script:EmailStatusControl = $null
 
 New-Item -ItemType Directory -Force $script:LogDir | Out-Null
 
@@ -48,6 +55,129 @@ function Write-PanelLog {
   param([string]$Message)
   $line = "{0}  {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message
   Add-Content -Path $script:PanelLogPath -Value $line -Encoding utf8
+}
+
+function Set-EmailStatus {
+  param(
+    [string]$Text,
+    [bool]$IsError = $false
+  )
+
+  if ($null -ne $script:EmailStatusControl) {
+    $script:EmailStatusControl.Text = $Text
+    if ($IsError) {
+      $script:EmailStatusControl.ForeColor = [System.Drawing.Color]::FromArgb(248, 113, 113)
+    }
+    else {
+      $script:EmailStatusControl.ForeColor = [System.Drawing.Color]::FromArgb(180, 186, 195)
+    }
+  }
+}
+
+function Get-EmailSettings {
+  $defaults = [pscustomobject]@{
+    AlertEmail = ""
+    SmtpEmail = ""
+    SmtpPassword = ""
+    AutoEmailAlerts = $false
+    LastSavedAt = $null
+  }
+
+  if (-not (Test-Path $script:ConfigPath)) {
+    return $defaults
+  }
+
+  try {
+    $settings = Get-Content -Raw -Path $script:ConfigPath -ErrorAction Stop | ConvertFrom-Json
+    $alertEmail = if ($null -ne $settings.AlertEmail) { [string]$settings.AlertEmail } else { "" }
+    $smtpEmail = if ($null -ne $settings.SmtpEmail) { [string]$settings.SmtpEmail } else { "" }
+    $smtpPassword = if ($null -ne $settings.SmtpPassword) { [string]$settings.SmtpPassword } else { "" }
+    $autoEmailAlerts = if ($null -ne $settings.AutoEmailAlerts) { [bool]$settings.AutoEmailAlerts } else { $false }
+    $lastSavedAt = if ($null -ne $settings.LastSavedAt) { $settings.LastSavedAt } else { $null }
+
+    return [pscustomobject]@{
+      AlertEmail = $alertEmail
+      SmtpEmail = $smtpEmail
+      SmtpPassword = $smtpPassword
+      AutoEmailAlerts = $autoEmailAlerts
+      LastSavedAt = $lastSavedAt
+    }
+  }
+  catch {
+    Write-PanelLog "Could not read email settings: $($_.Exception.Message)"
+    return $defaults
+  }
+}
+
+function Protect-EmailPassword {
+  param([string]$Password)
+  if ([string]::IsNullOrWhiteSpace($Password)) {
+    return ""
+  }
+  $secure = ConvertTo-SecureString $Password -AsPlainText -Force
+  return ConvertFrom-SecureString $secure
+}
+
+function Unprotect-EmailPassword {
+  param([string]$EncryptedPassword)
+  if ([string]::IsNullOrWhiteSpace($EncryptedPassword)) {
+    return ""
+  }
+
+  $secure = ConvertTo-SecureString $EncryptedPassword
+  $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+  try {
+    return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)
+  }
+  finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)
+  }
+}
+
+function Save-EmailSettings {
+  param(
+    [string]$AlertEmail,
+    [string]$SmtpEmail,
+    [string]$AppPasswordPlainText,
+    [bool]$AutoEmailAlerts
+  )
+
+  $existing = Get-EmailSettings
+  $encryptedPassword = $existing.SmtpPassword
+  if (-not [string]::IsNullOrWhiteSpace($AppPasswordPlainText)) {
+    $encryptedPassword = Protect-EmailPassword ($AppPasswordPlainText -replace "\s+", "")
+  }
+  elseif ([string]::IsNullOrWhiteSpace($AlertEmail) -and [string]::IsNullOrWhiteSpace($SmtpEmail)) {
+    $encryptedPassword = ""
+  }
+
+  $settings = [ordered]@{
+    AlertEmail = $AlertEmail.Trim()
+    SmtpEmail = $SmtpEmail.Trim()
+    SmtpPassword = $encryptedPassword
+    AutoEmailAlerts = $AutoEmailAlerts
+    LastSavedAt = (Get-Date).ToString("o")
+  }
+
+  New-Item -ItemType Directory -Force (Split-Path $script:ConfigPath) | Out-Null
+  $settings | ConvertTo-Json | Set-Content -Path $script:ConfigPath -Encoding utf8
+  Write-PanelLog "Email settings saved."
+}
+
+function Test-EmailSettingsConfigured {
+  param($Settings)
+  $from = if (-not [string]::IsNullOrWhiteSpace($Settings.SmtpEmail)) {
+    $Settings.SmtpEmail
+  }
+  else {
+    $Settings.AlertEmail
+  }
+
+  return (
+    -not [string]::IsNullOrWhiteSpace($Settings.AlertEmail) -and
+    -not [string]::IsNullOrWhiteSpace($from) -and
+    -not [string]::IsNullOrWhiteSpace($Settings.SmtpPassword)
+  )
 }
 
 function Get-PrivateLanAddresses {
@@ -176,6 +306,131 @@ function Get-LogText {
   }
 }
 
+function Send-EmailMessage {
+  param(
+    [string]$Subject,
+    [string]$Body
+  )
+
+  $settings = Get-EmailSettings
+  $from = if (-not [string]::IsNullOrWhiteSpace($settings.SmtpEmail)) {
+    $settings.SmtpEmail.Trim()
+  }
+  else {
+    $settings.AlertEmail.Trim()
+  }
+
+  if (-not (Test-EmailSettingsConfigured $settings)) {
+    throw "Set alert Gmail, sender Gmail, and Gmail App Password first."
+  }
+
+  $password = (Unprotect-EmailPassword $settings.SmtpPassword) -replace "\s+", ""
+  if ([string]::IsNullOrWhiteSpace($password)) {
+    throw "Gmail App Password is empty."
+  }
+
+  $message = New-Object System.Net.Mail.MailMessage
+  $client = New-Object System.Net.Mail.SmtpClient("smtp.gmail.com", 587)
+  try {
+    $message.From = New-Object System.Net.Mail.MailAddress($from)
+    $message.To.Add($settings.AlertEmail.Trim())
+    $message.Subject = $Subject
+    $message.Body = $Body
+    $message.SubjectEncoding = [System.Text.Encoding]::UTF8
+    $message.BodyEncoding = [System.Text.Encoding]::UTF8
+
+    $client.EnableSsl = $true
+    $client.UseDefaultCredentials = $false
+    $client.Timeout = 10000
+    $client.Credentials = New-Object System.Net.NetworkCredential($from, $password)
+    $client.Send($message)
+    Write-PanelLog "Email sent to $($settings.AlertEmail). Subject: $Subject"
+  }
+  finally {
+    $message.Dispose()
+    $client.Dispose()
+  }
+}
+
+function Send-CurrentUrlEmail {
+  param([string]$Reason = "Manual URL send")
+  $status = Get-ServerStatus
+  [void](Get-LanUrlText)
+
+  if (-not $status.Running) {
+    throw "Server is not running yet. Click Start Server first."
+  }
+
+  if ([string]::IsNullOrWhiteSpace($script:CurrentLanUrl)) {
+    throw "No LAN URL found. Check Wi-Fi/Ethernet connection."
+  }
+
+  Send-EmailMessage -Subject "Local POS URL: $script:CurrentLanUrl" -Body $script:CurrentLanUrl
+  Write-PanelLog "URL email sent. Reason: $Reason"
+}
+
+function Invoke-AutomaticEmailAlert {
+  param(
+    $Status,
+    [string]$UrlText
+  )
+
+  if ($script:ValidateOnlyMode) {
+    return
+  }
+
+  $settings = Get-EmailSettings
+  if (-not $settings.AutoEmailAlerts) {
+    $script:LastKnownLanUrl = $script:CurrentLanUrl
+    return
+  }
+
+  if (-not (Test-EmailSettingsConfigured $settings)) {
+    Set-EmailStatus "Auto alert is on, but Gmail settings are incomplete." $true
+    return
+  }
+
+  if (-not $Status.Running) {
+    Set-EmailStatus "Auto send is on. Waiting for server to run." $false
+    $script:LastKnownLanUrl = $script:CurrentLanUrl
+    return
+  }
+
+  if ([string]::IsNullOrWhiteSpace($script:CurrentLanUrl)) {
+    Set-EmailStatus "Auto send is on. Waiting for LAN URL." $false
+    return
+  }
+
+  if ($script:LastKnownLanUrl -eq $script:CurrentLanUrl) {
+    return
+  }
+
+  $previousLanUrl = $script:LastKnownLanUrl
+  $script:LastKnownLanUrl = $script:CurrentLanUrl
+
+  $signature = "url|$script:CurrentLanUrl"
+  $now = Get-Date
+  if (
+    $script:LastAlertSignature -eq $signature -and
+    $script:LastAlertAt -and
+    (($now - $script:LastAlertAt).TotalMinutes -lt 15)
+  ) {
+    return
+  }
+
+  try {
+    $reason = if ([string]::IsNullOrWhiteSpace($previousLanUrl)) { "first LAN URL" } else { "LAN URL changed" }
+    Send-EmailMessage -Subject "Local POS URL: $script:CurrentLanUrl" -Body $script:CurrentLanUrl
+    $script:LastAlertSignature = $signature
+    $script:LastAlertAt = $now
+    Set-EmailStatus "URL sent: $(Get-Date -Format "HH:mm:ss") ($reason)" $false
+  }
+  catch {
+    Write-PanelLog "URL email failed: $($_.Exception.Message)"
+    Set-EmailStatus "URL email failed: $($_.Exception.Message)" $true
+  }
+}
+
 function Start-PosServer {
   $listener = Get-ServerListener
   if ($listener) {
@@ -259,8 +514,8 @@ function New-Label {
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Local POS Control Panel"
 $form.StartPosition = "CenterScreen"
-$form.Size = New-Size 980 720
-$form.MinimumSize = New-Size 860 620
+$form.Size = New-Size 980 860
+$form.MinimumSize = New-Size 860 760
 $form.BackColor = [System.Drawing.Color]::FromArgb(18, 20, 24)
 $form.ForeColor = [System.Drawing.Color]::White
 $form.Font = New-Object System.Drawing.Font -ArgumentList "Segoe UI", 10
@@ -283,7 +538,7 @@ $statusTitle = New-Label "Status" 18 14 120 24 12 ([System.Drawing.FontStyle]::B
 $statusPanel.Controls.Add($statusTitle)
 
 $statusDot = New-Object System.Windows.Forms.Label
-$statusDot.Text = "●"
+$statusDot.Text = [string][char]0x25CF
 $statusDot.Location = New-Point 18 43
 $statusDot.Size = New-Size 30 34
 $statusDot.Font = New-Object System.Drawing.Font -ArgumentList "Segoe UI", 20, ([System.Drawing.FontStyle]::Bold)
@@ -329,17 +584,88 @@ $urlBox.ForeColor = [System.Drawing.Color]::FromArgb(235, 238, 245)
 $urlBox.Font = New-Object System.Drawing.Font -ArgumentList "Consolas", 10
 $form.Controls.Add($urlBox)
 
-$logLabel = New-Label "Server log" 22 410 220 24 12 ([System.Drawing.FontStyle]::Bold)
+$emailPanel = New-Object System.Windows.Forms.Panel
+$emailPanel.Location = New-Point 20 406
+$emailPanel.Size = New-Size 920 144
+$emailPanel.Anchor = "Top,Left,Right"
+$emailPanel.BackColor = [System.Drawing.Color]::FromArgb(28, 31, 38)
+$form.Controls.Add($emailPanel)
+
+$emailTitle = New-Label "Send LAN URL to Gmail" 18 12 260 24 12 ([System.Drawing.FontStyle]::Bold)
+$emailPanel.Controls.Add($emailTitle)
+
+$emailHelp = New-Label "Email body contains only the LAN URL, for example http://192.168.1.155:3000." 278 14 610 22 9
+$emailHelp.ForeColor = [System.Drawing.Color]::FromArgb(180, 186, 195)
+$emailPanel.Controls.Add($emailHelp)
+
+$lblAlertEmail = New-Label "Send to Gmail" 18 46 120 22 9
+$emailPanel.Controls.Add($lblAlertEmail)
+
+$txtAlertEmail = New-Object System.Windows.Forms.TextBox
+$txtAlertEmail.Location = New-Point 136 44
+$txtAlertEmail.Size = New-Size 245 25
+$txtAlertEmail.BorderStyle = "FixedSingle"
+$txtAlertEmail.BackColor = [System.Drawing.Color]::FromArgb(12, 14, 18)
+$txtAlertEmail.ForeColor = [System.Drawing.Color]::White
+$txtAlertEmail.Font = New-Object System.Drawing.Font -ArgumentList "Segoe UI", 10
+$emailPanel.Controls.Add($txtAlertEmail)
+
+$lblSmtpEmail = New-Label "Sender Gmail" 396 46 120 22 9
+$emailPanel.Controls.Add($lblSmtpEmail)
+
+$txtSmtpEmail = New-Object System.Windows.Forms.TextBox
+$txtSmtpEmail.Location = New-Point 512 44
+$txtSmtpEmail.Size = New-Size 245 25
+$txtSmtpEmail.BorderStyle = "FixedSingle"
+$txtSmtpEmail.BackColor = [System.Drawing.Color]::FromArgb(12, 14, 18)
+$txtSmtpEmail.ForeColor = [System.Drawing.Color]::White
+$txtSmtpEmail.Font = New-Object System.Drawing.Font -ArgumentList "Segoe UI", 10
+$emailPanel.Controls.Add($txtSmtpEmail)
+
+$lblPassword = New-Label "App Password" 18 82 120 22 9
+$emailPanel.Controls.Add($lblPassword)
+
+$txtAppPassword = New-Object System.Windows.Forms.TextBox
+$txtAppPassword.Location = New-Point 136 80
+$txtAppPassword.Size = New-Size 245 25
+$txtAppPassword.BorderStyle = "FixedSingle"
+$txtAppPassword.BackColor = [System.Drawing.Color]::FromArgb(12, 14, 18)
+$txtAppPassword.ForeColor = [System.Drawing.Color]::White
+$txtAppPassword.Font = New-Object System.Drawing.Font -ArgumentList "Segoe UI", 10
+$txtAppPassword.UseSystemPasswordChar = $true
+$emailPanel.Controls.Add($txtAppPassword)
+
+$chkAutoEmail = New-Object System.Windows.Forms.CheckBox
+$chkAutoEmail.Text = "Auto send when LAN URL appears or changes"
+$chkAutoEmail.Location = New-Point 396 80
+$chkAutoEmail.Size = New-Size 330 26
+$chkAutoEmail.ForeColor = [System.Drawing.Color]::White
+$chkAutoEmail.BackColor = $emailPanel.BackColor
+$chkAutoEmail.Font = New-Object System.Drawing.Font -ArgumentList "Segoe UI", 9
+$emailPanel.Controls.Add($chkAutoEmail)
+
+$btnSaveEmail = New-Button "Save Gmail" 734 76 150 34 ([System.Drawing.Color]::FromArgb(82, 92, 110))
+$emailPanel.Controls.Add($btnSaveEmail)
+
+$btnSendUrlEmail = New-Button "Send URL Now" 734 36 150 34 ([System.Drawing.Color]::FromArgb(37, 99, 235))
+$emailPanel.Controls.Add($btnSendUrlEmail)
+
+$emailStatus = New-Label "Gmail settings are stored locally in data/control-panel-settings.json." 18 114 860 22 9
+$emailStatus.ForeColor = [System.Drawing.Color]::FromArgb(180, 186, 195)
+$emailPanel.Controls.Add($emailStatus)
+$script:EmailStatusControl = $emailStatus
+
+$logLabel = New-Label "Server log" 22 572 220 24 12 ([System.Drawing.FontStyle]::Bold)
 $form.Controls.Add($logLabel)
 
-$logPathLabel = New-Label "Log file: -" 150 413 790 22 9
+$logPathLabel = New-Label "Log file: -" 150 575 790 22 9
 $logPathLabel.Anchor = "Top,Left,Right"
 $logPathLabel.ForeColor = [System.Drawing.Color]::FromArgb(160, 166, 175)
 $form.Controls.Add($logPathLabel)
 
 $logBox = New-Object System.Windows.Forms.TextBox
-$logBox.Location = New-Point 20 440
-$logBox.Size = New-Size 920 190
+$logBox.Location = New-Point 20 602
+$logBox.Size = New-Size 920 170
 $logBox.Anchor = "Top,Bottom,Left,Right"
 $logBox.Multiline = $true
 $logBox.ScrollBars = "Vertical"
@@ -350,15 +676,45 @@ $logBox.ForeColor = [System.Drawing.Color]::FromArgb(220, 225, 235)
 $logBox.Font = New-Object System.Drawing.Font -ArgumentList "Consolas", 9
 $form.Controls.Add($logBox)
 
-$btnOpenLogs = New-Button "Open Logs Folder" 20 646 150 34 ([System.Drawing.Color]::FromArgb(82, 92, 110))
-$btnOpenData = New-Button "Open Data Folder" 180 646 150 34 ([System.Drawing.Color]::FromArgb(82, 92, 110))
-$btnClearPanelLog = New-Button "Clear Panel Log" 340 646 145 34 ([System.Drawing.Color]::FromArgb(82, 92, 110))
+$btnOpenLogs = New-Button "Open Logs Folder" 20 790 150 34 ([System.Drawing.Color]::FromArgb(82, 92, 110))
+$btnOpenData = New-Button "Open Data Folder" 180 790 150 34 ([System.Drawing.Color]::FromArgb(82, 92, 110))
+$btnClearPanelLog = New-Button "Clear Panel Log" 340 790 145 34 ([System.Drawing.Color]::FromArgb(82, 92, 110))
 $form.Controls.AddRange(@($btnOpenLogs, $btnOpenData, $btnClearPanelLog))
+
+function Load-EmailSettingsIntoForm {
+  $settings = Get-EmailSettings
+  $txtAlertEmail.Text = $settings.AlertEmail
+  $txtSmtpEmail.Text = $settings.SmtpEmail
+  $txtAppPassword.Text = ""
+  $chkAutoEmail.Checked = [bool]$settings.AutoEmailAlerts
+
+  if (Test-EmailSettingsConfigured $settings) {
+    Set-EmailStatus "Gmail saved. Leave App Password blank to keep the saved password." $false
+  }
+  else {
+    Set-EmailStatus "Enter Gmail settings, then click Save Gmail or Send URL Now." $false
+  }
+}
+
+function Save-EmailSettingsFromForm {
+  Save-EmailSettings `
+    -AlertEmail $txtAlertEmail.Text `
+    -SmtpEmail $txtSmtpEmail.Text `
+    -AppPasswordPlainText $txtAppPassword.Text `
+    -AutoEmailAlerts $chkAutoEmail.Checked
+
+  $txtAppPassword.Text = ""
+  $script:LastKnownLanUrl = $null
+  $script:LastAlertSignature = $null
+  $script:LastAlertAt = $null
+  Set-EmailStatus "Gmail saved. Email body will contain only the LAN URL." $false
+}
 
 function Update-Panel {
   try {
     $status = Get-ServerStatus
-    $urlBox.Text = Get-LanUrlText
+    $urlText = Get-LanUrlText
+    $urlBox.Text = $urlText
 
     if ($status.Running -and $status.Health) {
       $statusDot.ForeColor = [System.Drawing.Color]::FromArgb(39, 174, 96)
@@ -387,6 +743,7 @@ function Update-Panel {
     $logPathLabel.Text = "Log file: $script:LastLogPath"
     $logBox.SelectionStart = $logBox.Text.Length
     $logBox.ScrollToCaret()
+    Invoke-AutomaticEmailAlert -Status $status -UrlText $urlText
   }
   catch {
     Write-PanelLog "Panel refresh error: $($_.Exception.Message)"
@@ -447,12 +804,36 @@ $btnClearPanelLog.Add_Click({
   Update-Panel
 })
 
+$btnSaveEmail.Add_Click({
+  try {
+    Save-EmailSettingsFromForm
+    Update-Panel
+  }
+  catch {
+    Write-PanelLog "Save Gmail failed: $($_.Exception.Message)"
+    Set-EmailStatus "Save Gmail failed: $($_.Exception.Message)" $true
+  }
+})
+
+$btnSendUrlEmail.Add_Click({
+  try {
+    Save-EmailSettingsFromForm
+    Send-CurrentUrlEmail -Reason "Manual button"
+    Set-EmailStatus "URL sent to Gmail: $script:CurrentLanUrl" $false
+  }
+  catch {
+    Write-PanelLog "Send URL failed: $($_.Exception.Message)"
+    Set-EmailStatus "Send URL failed: $($_.Exception.Message)" $true
+  }
+})
+
 $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 2500
 $timer.Add_Tick({ Update-Panel })
 
 $form.Add_Shown({
   Write-PanelLog "Control panel opened."
+  Load-EmailSettingsIntoForm
   Update-Panel
   $timer.Start()
 })
@@ -463,6 +844,7 @@ $form.Add_FormClosing({
 })
 
 if ($ValidateOnly) {
+  Load-EmailSettingsIntoForm
   Update-Panel
   Write-Host "Local POS Control Panel UI initialized successfully."
   $form.Dispose()

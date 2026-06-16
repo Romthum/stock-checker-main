@@ -196,6 +196,26 @@ scripts/windows/open-control-panel.cmd
 
 The control panel shows server status, LAN URLs, health check output, and the latest server logs. It also has buttons to start, stop, restart, open the web app, copy the LAN URL, and open the data/log folders.
 
+The control panel can also send the current LAN URL to Gmail. Fill in:
+
+- Send to Gmail: the address that should receive the URL
+- Sender Gmail: the Gmail account used to send mail, or leave it blank if it is the same as Send to Gmail
+- App Password: a Gmail app password, not the normal Gmail login password
+
+Then click `Send URL Now`. The email body contains only the real LAN URL, such as:
+
+```text
+http://192.168.1.155:3000
+```
+
+It does not send `0.0.0.0`, because that address is only for the server to listen on and cannot be opened from phones/tablets. Enable `Auto send when LAN URL appears or changes` if you want the Mini PC to email the URL automatically after the network changes.
+
+Gmail settings are stored locally on the Mini PC in:
+
+```text
+data/control-panel-settings.json
+```
+
 Create a Desktop shortcut:
 
 ```powershell
