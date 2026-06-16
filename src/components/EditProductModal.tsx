@@ -98,96 +98,109 @@ export default function EditProductModal({ open, onClose, product, onSaved }: Pr
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-2xl rounded-lg border border-zinc-800 bg-zinc-950 p-5 text-zinc-100 shadow-xl">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Edit product</h2>
-          <button onClick={onClose} className="rounded px-2 py-1 text-zinc-400 hover:text-white">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4">
+      <div className="flex max-h-[100dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-xl sm:max-h-[calc(100dvh-2rem)] sm:max-w-2xl sm:rounded-lg">
+        <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 bg-zinc-950 px-4 py-3 sm:px-5">
+          <div className="min-w-0">
+            <h2 className="truncate text-lg font-semibold">Edit product</h2>
+            <p className="truncate text-xs text-zinc-500">{form.sku || form.name || 'Product details'}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-900 hover:text-white"
+          >
             Close
           </button>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-[220px_1fr]">
-          <ImageUpload
-            value={form.image_url ?? ''}
-            onChange={(url) => setForm((prev) => ({ ...prev, image_url: url }))}
-          />
-
-          <div className="space-y-3">
-            <label className="block">
-              <span className="mb-1 block text-sm text-zinc-400">Name</span>
-              <input
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+          <div className="grid gap-4 sm:grid-cols-[200px_1fr]">
+            <div className="mx-auto w-full max-w-52 sm:max-w-none">
+              <ImageUpload
+                value={form.image_url ?? ''}
+                onChange={(url) => setForm((prev) => ({ ...prev, image_url: url }))}
               />
-            </label>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block">
-                <span className="mb-1 block text-sm text-zinc-400">SKU / Barcode</span>
-                <input
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2"
-                  value={form.sku ?? ''}
-                  onChange={(e) => setForm({ ...form, sku: e.target.value })}
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-sm text-zinc-400">Category</span>
-                <input
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2"
-                  value={form.category ?? ''}
-                  onChange={(e) => setForm({ ...form, category: e.target.value })}
-                />
-              </label>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="space-y-3">
               <label className="block">
-                <span className="mb-1 block text-sm text-zinc-400">Cost</span>
+                <span className="mb-1 block text-sm text-zinc-400">Name</span>
                 <input
-                  type="number"
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2"
-                  value={form.cost_price ?? 0}
-                  onChange={(e) => setForm({ ...form, cost_price: Number(e.target.value) })}
+                  className="h-12 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-base"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
                 />
               </label>
-              <label className="block">
-                <span className="mb-1 block text-sm text-zinc-400">Price</span>
-                <input
-                  type="number"
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2"
-                  value={form.sale_price ?? 0}
-                  onChange={(e) => setForm({ ...form, sale_price: Number(e.target.value) })}
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-sm text-zinc-400">Stock</span>
-                <input
-                  type="number"
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2"
-                  value={form.qty ?? 0}
-                  onChange={(e) => setForm({ ...form, qty: Number(e.target.value) })}
-                />
-              </label>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="mb-1 block text-sm text-zinc-400">SKU / Barcode</span>
+                  <input
+                    className="h-12 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-base"
+                    value={form.sku ?? ''}
+                    onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-sm text-zinc-400">Category</span>
+                  <input
+                    className="h-12 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-base"
+                    value={form.category ?? ''}
+                    onChange={(e) => setForm({ ...form, category: e.target.value })}
+                  />
+                </label>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <label className="block">
+                  <span className="mb-1 block text-sm text-zinc-400">Cost</span>
+                  <input
+                    type="number"
+                    className="h-12 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-base"
+                    value={form.cost_price ?? 0}
+                    onChange={(e) => setForm({ ...form, cost_price: Number(e.target.value) })}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-sm text-zinc-400">Price</span>
+                  <input
+                    type="number"
+                    className="h-12 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-base"
+                    value={form.sale_price ?? 0}
+                    onChange={(e) => setForm({ ...form, sale_price: Number(e.target.value) })}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-sm text-zinc-400">Stock</span>
+                  <input
+                    type="number"
+                    className="h-12 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-base"
+                    value={form.qty ?? 0}
+                    onChange={(e) => setForm({ ...form, qty: Number(e.target.value) })}
+                  />
+                </label>
+              </div>
             </div>
           </div>
+
+          {error ? <div className="mt-4 rounded-lg bg-red-950/50 p-3 text-sm text-red-300">{error}</div> : null}
         </div>
 
-        {error ? <div className="mt-4 text-sm text-red-400">{error}</div> : null}
-
-        <div className="mt-5 flex items-center justify-between border-t border-zinc-800 pt-4">
+        <div className="grid shrink-0 grid-cols-2 gap-2 border-t border-zinc-800 bg-zinc-950 p-4 sm:flex sm:items-center sm:justify-between sm:px-5">
           <button
+            type="button"
             onClick={del}
             disabled={busy}
-            className="rounded-lg bg-red-600 px-4 py-2 text-white hover:bg-red-500 disabled:opacity-60"
+            className="h-12 rounded-lg bg-red-600 px-4 text-white hover:bg-red-500 disabled:opacity-60 sm:h-10"
           >
             Delete
           </button>
           <button
+            type="button"
             onClick={save}
             disabled={busy}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-500 disabled:opacity-60"
+            className="h-12 rounded-lg bg-blue-600 px-4 text-white hover:bg-blue-500 disabled:opacity-60 sm:h-10"
           >
             {busy ? 'Saving...' : 'Save'}
           </button>
