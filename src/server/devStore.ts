@@ -75,7 +75,7 @@ export function isDevFileStoreEnabled() {
 async function readStore(): Promise<DevStoreData> {
   try {
     const raw = await fs.readFile(storePath, 'utf8');
-    const parsed = JSON.parse(raw) as DevStoreData;
+    const parsed = JSON.parse(raw.replace(/^\uFEFF/, '')) as DevStoreData;
     return {
       products: Array.isArray(parsed.products) ? parsed.products : [],
       movements: Array.isArray(parsed.movements) ? parsed.movements : [],
