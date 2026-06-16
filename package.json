@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "dev:lan": "next dev --hostname 0.0.0.0 --port 3000",
+    "dev:lan": "powershell -ExecutionPolicy Bypass -File scripts/windows/dev-lan.ps1",
     "lan:url": "powershell -ExecutionPolicy Bypass -File scripts/windows/show-lan-url.ps1",
     "data:repair-encoding": "node scripts/repair-dev-store-encoding.mjs",
     "db:migrate": "node scripts/migrate.mjs",
