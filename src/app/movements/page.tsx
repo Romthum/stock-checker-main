@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
+import { useI18n } from '@/lib/i18n';
+import { useRole } from '@/lib/useRole';
 
 type Movement = {
   id: string;
@@ -22,6 +24,8 @@ function toDateInput(date: Date) {
 }
 
 export default function MovementsPage() {
+  const { language, t } = useI18n();
+  const { user, loading: authLoading } = useRole();
   const [rows, setRows] = useState<Movement[]>([]);
   const [rangeKey, setRangeKey] = useState<RangeKey>('7d');
   const [from, setFrom] = useState('');
@@ -48,6 +52,10 @@ export default function MovementsPage() {
   }, [rangeKey, from, to]);
 
   async function load() {
+    if (!user) {
+      setRows([]);
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -70,7 +78,7 @@ export default function MovementsPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [range.start.toISOString(), range.end.toISOString()]);
+  }, [range.start.toISOString(), range.end.toISOString(), user]);
 
   const stats = useMemo(() => {
     return rows.reduce(
@@ -86,13 +94,42 @@ export default function MovementsPage() {
     );
   }, [rows]);
 
+  function rangeLabel(key: RangeKey) {
+    if (key === 'today') return t('today');
+    if (key === '7d') return language === 'th' ? '7 วัน' : '7d';
+    if (key === '30d') return language === 'th' ? '30 วัน' : '30d';
+    return t('custom');
+  }
+
+  function reasonLabel(reason: string) {
+    if (reason === 'SALE') return t('sold');
+    if (reason === 'RESTOCK') return t('restocked');
+    if (reason === 'ADJUST') return t('adjusted');
+    return reason;
+  }
+
+  if (authLoading) {
+    return <div className="py-12 text-center text-zinc-500">{t('loading')}</div>;
+  }
+
+  if (!user) {
+    return (
+      <div className="space-y-4">
+        <Link href="/" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700">
+          {t('backToHome')}
+        </Link>
+        <div className="card p-5">{t('loginRequired')}</div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <Link href="/" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700">
-          Home
+          {t('backToHome')}
         </Link>
-        <h1 className="text-lg font-semibold">Stock movements</h1>
+        <h1 className="text-lg font-semibold">{t('stockMovements')}</h1>
       </div>
 
       <div className="card space-y-3 p-4">
@@ -105,7 +142,7 @@ export default function MovementsPage() {
                 rangeKey === key ? 'border-blue-600 bg-blue-600 text-white' : 'border-zinc-300 dark:border-zinc-700'
               }`}
             >
-              {key === 'today' ? 'Today' : key}
+              {rangeLabel(key)}
             </button>
           ))}
           <input
@@ -127,33 +164,33 @@ export default function MovementsPage() {
             className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-950"
           />
           <button onClick={load} className="rounded-lg bg-zinc-800 px-3 py-1.5 text-sm text-white">
-            Refresh
+            {t('refresh')}
           </button>
         </div>
         <div className="text-xs text-zinc-500">
-          {toDateInput(range.start)} to {toDateInput(range.end)}
+          {toDateInput(range.start)} {language === 'th' ? 'ถึง' : 'to'} {toDateInput(range.end)}
         </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-5">
         <div className="card p-3">
-          <div className="text-xs text-zinc-500">Rows</div>
+          <div className="text-xs text-zinc-500">{t('rows')}</div>
           <div className="text-2xl font-semibold">{stats.total}</div>
         </div>
         <div className="card p-3">
-          <div className="text-xs text-zinc-500">Sold</div>
+          <div className="text-xs text-zinc-500">{t('sold')}</div>
           <div className="text-2xl font-semibold text-red-600">{stats.sale}</div>
         </div>
         <div className="card p-3">
-          <div className="text-xs text-zinc-500">Restocked</div>
+          <div className="text-xs text-zinc-500">{t('restocked')}</div>
           <div className="text-2xl font-semibold text-emerald-600">{stats.restock}</div>
         </div>
         <div className="card p-3">
-          <div className="text-xs text-zinc-500">Adjusted</div>
+          <div className="text-xs text-zinc-500">{t('adjusted')}</div>
           <div className="text-2xl font-semibold">{stats.adjust}</div>
         </div>
         <div className="card p-3">
-          <div className="text-xs text-zinc-500">Net</div>
+          <div className="text-xs text-zinc-500">{t('net')}</div>
           <div className="text-2xl font-semibold">{stats.net}</div>
         </div>
       </div>
@@ -164,18 +201,18 @@ export default function MovementsPage() {
         <table className="w-full text-sm">
           <thead className="bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">
             <tr>
-              <th className="px-3 py-2 text-left">Product</th>
+              <th className="px-3 py-2 text-left">{t('product')}</th>
               <th className="px-3 py-2 text-left">SKU</th>
-              <th className="px-3 py-2 text-right">Change</th>
-              <th className="px-3 py-2 text-left">Reason</th>
-              <th className="px-3 py-2 text-left">Time</th>
+              <th className="px-3 py-2 text-right">{t('change')}</th>
+              <th className="px-3 py-2 text-left">{t('reason')}</th>
+              <th className="px-3 py-2 text-left">{t('time')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
             {loading ? (
               <tr>
                 <td colSpan={5} className="px-3 py-8 text-center text-zinc-500">
-                  Loading...
+                  {t('loading')}
                 </td>
               </tr>
             ) : rows.length ? (
@@ -186,14 +223,14 @@ export default function MovementsPage() {
                   <td className={`px-3 py-2 text-right font-semibold ${row.change < 0 ? 'text-red-600' : 'text-emerald-600'}`}>
                     {row.change > 0 ? `+${row.change}` : row.change}
                   </td>
-                  <td className="px-3 py-2">{row.reason}</td>
+                  <td className="px-3 py-2">{reasonLabel(row.reason)}</td>
                   <td className="px-3 py-2 text-zinc-500">{new Date(row.created_at).toLocaleString()}</td>
                 </tr>
               ))
             ) : (
               <tr>
                 <td colSpan={5} className="px-3 py-8 text-center text-zinc-500">
-                  No movements found
+                  {t('noMovements')}
                 </td>
               </tr>
             )}

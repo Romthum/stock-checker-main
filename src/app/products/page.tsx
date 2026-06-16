@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from 'react';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import EditProductModal from '@/components/EditProductModal';
 import { useRole } from '@/lib/useRole';
+import { useI18n } from '@/lib/i18n';
 
 type Product = {
   id: string;
@@ -22,7 +23,8 @@ type Product = {
 const PAGE_SIZE = 25;
 
 export default function ProductsPage() {
-  const { canManage } = useRole();
+  const { user, canManage, loading: authLoading } = useRole();
+  const { t } = useI18n();
   const [items, setItems] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [activeCat, setActiveCat] = useState('All');
@@ -37,6 +39,7 @@ export default function ProductsPage() {
   const [columns, setColumns] = useState(2);
 
   async function loadCategories() {
+    if (!user) return;
     const res = await fetch('/api/products/categories', { cache: 'no-store' });
     if (!res.ok) return;
     const json = await res.json();
@@ -44,6 +47,11 @@ export default function ProductsPage() {
   }
 
   async function loadProducts(reset = true) {
+    if (!user) {
+      setItems([]);
+      setNextCursor(null);
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -68,8 +76,10 @@ export default function ProductsPage() {
   }
 
   useEffect(() => {
-    loadCategories();
-  }, []);
+    if (user) loadCategories();
+    else setCategories([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQ(q.trim()), 300);
@@ -79,7 +89,7 @@ export default function ProductsPage() {
   useEffect(() => {
     loadProducts(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedQ, activeCat]);
+  }, [debouncedQ, activeCat, user]);
 
   async function adjust(id: string, delta: number, reason: 'RESTOCK' | 'SALE' | 'ADJUST') {
     setUpdatingId(id);
@@ -102,24 +112,44 @@ export default function ProductsPage() {
 
   const tabs = useMemo(() => ['All', ...categories, 'Uncategorized'], [categories]);
   const compactCards = columns >= 3;
+  const tabLabel = (cat: string) => {
+    if (cat === 'All') return t('all');
+    if (cat === 'Uncategorized') return t('uncategorized');
+    return cat;
+  };
+
+  if (authLoading) {
+    return <div className="py-12 text-center text-zinc-500">{t('loading')}</div>;
+  }
+
+  if (!user) {
+    return (
+      <div className="space-y-4">
+        <Link href="/" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700">
+          {t('backToHome')}
+        </Link>
+        <div className="card p-5">{t('loginRequired')}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
       <div className="sticky top-0 z-30 -mx-3 border-b border-zinc-200 bg-zinc-50/95 px-3 py-3 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
         <div className="mb-3 flex items-center justify-between gap-2">
           <Link href="/" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700">
-            Home
+            {t('backToHome')}
           </Link>
           {canManage ? (
             <Link href="/products/new" className="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white">
-              Add product
+              {t('addProduct')}
             </Link>
           ) : null}
         </div>
         <div className="flex gap-2">
           <input
             className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
-            placeholder="Search name or barcode"
+            placeholder={t('searchProduct')}
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
@@ -127,11 +157,11 @@ export default function ProductsPage() {
             className="rounded-lg bg-zinc-800 px-3 py-2 text-sm text-white dark:bg-zinc-700"
             onClick={() => setShowScanner(true)}
           >
-            Scan
+            {t('scan')}
           </button>
         </div>
         <div className="mt-3 flex items-center justify-between gap-3">
-          <span className="text-sm font-medium text-zinc-600 dark:text-zinc-300">จำนวนหลัก</span>
+          <span className="text-sm font-medium text-zinc-600 dark:text-zinc-300">{t('columns')}</span>
           <div className="grid grid-cols-4 gap-1 rounded-lg border border-zinc-300 bg-white p-1 dark:border-zinc-700 dark:bg-zinc-900">
             {[1, 2, 3, 4].map((value) => (
               <button
@@ -162,7 +192,7 @@ export default function ProductsPage() {
                 : 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-900'
             }`}
           >
-            {cat}
+            {tabLabel(cat)}
           </button>
         ))}
       </div>
@@ -187,7 +217,7 @@ export default function ProductsPage() {
                     className="h-full w-full object-cover"
                   />
                 ) : (
-                  <div className="flex h-full items-center justify-center text-sm text-zinc-400">No image</div>
+                  <div className="flex h-full items-center justify-center text-sm text-zinc-400">{t('product')}</div>
                 )}
               </div>
               <div className={`${compactCards ? 'space-y-2 p-2' : 'space-y-3 p-3'}`}>
@@ -196,11 +226,11 @@ export default function ProductsPage() {
                   <div className="mt-1 truncate text-xs text-zinc-500">{item.sku || '-'}</div>
                 </div>
                 <div className={`flex ${compactCards ? 'flex-col gap-0.5' : 'items-center justify-between'}`}>
-                  <span className="text-xs text-zinc-500">Price</span>
+                  <span className="text-xs text-zinc-500">{t('price')}</span>
                   <span className={`${compactCards ? 'text-xs' : 'text-sm'} font-semibold`}>{item.sale_price.toLocaleString()} THB</span>
                 </div>
                 <div className={`flex ${compactCards ? 'flex-col gap-0.5' : 'items-center justify-between'}`}>
-                  <span className="text-xs text-zinc-500">Stock</span>
+                  <span className="text-xs text-zinc-500">{t('stock')}</span>
                   <span className={item.qty <= 5 ? 'font-semibold text-amber-600' : 'font-semibold'}>
                     {item.qty}
                   </span>
@@ -226,7 +256,7 @@ export default function ProductsPage() {
                     className={`${compactCards ? 'px-2 py-2 text-xs' : 'px-3 py-2 text-sm'} w-full rounded-lg border border-zinc-300 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800`}
                     onClick={() => setEditItem(item)}
                   >
-                    Edit
+                    {t('edit')}
                   </button>
                 ) : null}
               </div>
@@ -240,13 +270,13 @@ export default function ProductsPage() {
             onClick={() => loadProducts(false)}
             className="mt-3 w-full rounded-lg bg-zinc-200 px-4 py-2 hover:bg-zinc-300 disabled:opacity-60 dark:bg-zinc-800 dark:hover:bg-zinc-700"
           >
-            {loading ? 'Loading...' : 'Load more'}
+            {loading ? t('loading') : t('loadMore')}
           </button>
         ) : null}
       </div>
 
       {!loading && !items.length ? (
-        <div className="py-12 text-center text-zinc-500">No products found</div>
+        <div className="py-12 text-center text-zinc-500">{t('noProducts')}</div>
       ) : null}
 
       {showScanner ? (

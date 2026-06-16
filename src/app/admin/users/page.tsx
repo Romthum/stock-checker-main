@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useRole } from '@/lib/useRole';
+import { useI18n } from '@/lib/i18n';
 
 type Role = 'OWNER' | 'MANAGER' | 'CASHIER' | 'INVENTORY_STAFF' | 'AUDITOR' | 'STAFF';
 
@@ -39,6 +40,7 @@ function getApiError(json: ApiErrorResponse, fallback: string) {
 
 export default function UsersPage() {
   const { role, loading } = useRole();
+  const { t } = useI18n();
   const [users, setUsers] = useState<UserRow[]>([]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -56,7 +58,7 @@ export default function UsersPage() {
     const res = await fetch('/api/admin/users', { cache: 'no-store' });
     const json = await res.json();
     if (!res.ok) {
-      setMessage(getApiError(json, 'Failed to load users'));
+      setMessage(getApiError(json, 'โหลดผู้ใช้ไม่สำเร็จ'));
       return;
     }
     setUsers(json.users ?? []);
@@ -69,12 +71,12 @@ export default function UsersPage() {
   async function createUser() {
     const normalizedEmail = email.trim().toLowerCase();
     if (!normalizedEmail || !normalizedEmail.includes('@')) {
-      setMessage('Please enter a valid email address.');
+      setMessage('กรุณากรอกอีเมลให้ถูกต้อง');
       return;
     }
     const newPassword = password.trim();
     if (newPassword.length < 8) {
-      setMessage('Please enter a password with at least 8 characters.');
+      setMessage(t('passwordHelp'));
       return;
     }
     setBusy(true);
@@ -96,7 +98,7 @@ export default function UsersPage() {
       setEmail('');
       setPassword('');
       setDisplayName('');
-      setMessage('User saved. They can sign in with the password you set.');
+      setMessage(t('savedUser'));
       setTempPassword(json.tempPassword ?? '');
       await load();
     } catch (err) {
@@ -128,7 +130,7 @@ export default function UsersPage() {
   }
 
   async function deactivate(id: string) {
-    if (!confirm('Deactivate this user?')) return;
+    if (!confirm(t('deactivateConfirm'))) return;
     setBusy(true);
     setMessage('');
     try {
@@ -143,14 +145,14 @@ export default function UsersPage() {
     }
   }
 
-  if (loading) return <div className="py-12 text-center text-zinc-500">Loading...</div>;
+  if (loading) return <div className="py-12 text-center text-zinc-500">{t('loading')}</div>;
   if (!canView) {
     return (
       <div className="space-y-4">
         <Link href="/" className="rounded-lg border px-3 py-2 text-sm">
-          Home
+          {t('backToHome')}
         </Link>
-        <div className="card p-5">Only managers and owners can view users.</div>
+        <div className="card p-5">{t('youCannotViewUsers')}</div>
       </div>
     );
   }
@@ -159,32 +161,32 @@ export default function UsersPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <Link href="/" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700">
-          Home
+          {t('backToHome')}
         </Link>
-        <h1 className="text-lg font-semibold">Users</h1>
+        <h1 className="text-lg font-semibold">{t('users')}</h1>
       </div>
 
       {canEdit ? (
         <div className="card space-y-3 p-4">
-          <div className="font-medium">Create staff account</div>
+          <div className="font-medium">{t('createAccount')}</div>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto_auto]">
             <input
               type="email"
-              placeholder="Email"
+              placeholder={t('email')}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
             />
             <input
               type="password"
-              placeholder="Password, at least 8 characters"
+              placeholder={t('passwordHelp')}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="new-password"
               className="rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
             />
             <input
-              placeholder="Display name"
+              placeholder={t('displayName')}
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               className="rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
@@ -205,7 +207,7 @@ export default function UsersPage() {
               disabled={busy || !email || password.trim().length < 8}
               className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-500 disabled:opacity-60"
             >
-              Save
+              {t('save')}
             </button>
           </div>
         </div>
@@ -214,7 +216,7 @@ export default function UsersPage() {
       {message ? <div className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{message}</div> : null}
       {tempPassword ? (
         <div className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
-          Temporary password: <b>{tempPassword}</b>
+          {t('tempPassword')}: <b>{tempPassword}</b>
         </div>
       ) : null}
 
@@ -222,10 +224,10 @@ export default function UsersPage() {
         <table className="w-full text-sm">
           <thead className="bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300">
             <tr>
-              <th className="px-3 py-2 text-left">User</th>
-              <th className="px-3 py-2 text-left">Role</th>
-              <th className="px-3 py-2 text-left">Status</th>
-              <th className="px-3 py-2 text-right">Actions</th>
+              <th className="px-3 py-2 text-left">{t('user')}</th>
+              <th className="px-3 py-2 text-left">{t('role')}</th>
+              <th className="px-3 py-2 text-left">{t('status')}</th>
+              <th className="px-3 py-2 text-right">{t('actions')}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -252,7 +254,7 @@ export default function UsersPage() {
                     user.role
                   )}
                 </td>
-                <td className="px-3 py-2">{user.is_active ? 'Active' : 'Inactive'}</td>
+                <td className="px-3 py-2">{user.is_active ? t('active') : t('inactive')}</td>
                 <td className="px-3 py-2">
                   {canEdit ? (
                     <div className="flex justify-end gap-2">
@@ -260,26 +262,26 @@ export default function UsersPage() {
                         onClick={() => updateUser({ id: user.id, reset_password: true })}
                         className="rounded-lg bg-zinc-200 px-3 py-1.5 hover:bg-zinc-300 dark:bg-zinc-800 dark:hover:bg-zinc-700"
                       >
-                        Reset
+                        {t('reset')}
                       </button>
                       {user.is_active ? (
                         <button
                           onClick={() => deactivate(user.id)}
                           className="rounded-lg bg-red-600 px-3 py-1.5 text-white hover:bg-red-500"
                         >
-                          Deactivate
+                          {t('deactivate')}
                         </button>
                       ) : (
                         <button
                           onClick={() => updateUser({ id: user.id, is_active: true })}
                           className="rounded-lg bg-emerald-600 px-3 py-1.5 text-white hover:bg-emerald-500"
                         >
-                          Activate
+                          {t('activate')}
                         </button>
                       )}
                     </div>
                   ) : (
-                    <span className="text-zinc-500">Read only</span>
+                    <span className="text-zinc-500">{t('readOnly')}</span>
                   )}
                 </td>
               </tr>

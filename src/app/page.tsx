@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { FormEvent, useEffect, useState } from 'react';
 import { useRole, type CurrentUser } from '@/lib/useRole';
+import { useI18n } from '@/lib/i18n';
 
 type Stats = {
   products: number;
@@ -75,6 +76,7 @@ function MenuTile({ title, subtitle, image, href, onClick, tone = 'default' }: M
 
 export default function Home() {
   const { user, role, canManage, loading, refresh } = useRole();
+  const { t } = useI18n();
   const [stats, setStats] = useState<Stats | null>(null);
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
@@ -122,7 +124,7 @@ export default function Home() {
   }
 
   if (loading) {
-    return <div className="py-16 text-center text-zinc-500">Loading...</div>;
+    return <div className="py-16 text-center text-zinc-500">{t('loading')}</div>;
   }
 
   if (!user) {
@@ -131,12 +133,12 @@ export default function Home() {
         <div className="space-y-3 text-center">
           <BrandLogo />
           <h1 className="text-2xl font-semibold">{BRAND_NAME}</h1>
-          <p className="mt-1 text-sm text-zinc-500">Sign in to manage sales and inventory.</p>
+          <p className="mt-1 text-sm text-zinc-500">{t('signInSubtitle')}</p>
         </div>
 
         <form onSubmit={submit} className="card space-y-4 p-5">
           <label className="block">
-            <span className="mb-1 block text-sm text-zinc-500">Email or username</span>
+            <span className="mb-1 block text-sm text-zinc-500">{t('emailOrUsername')}</span>
             <input
               className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
               value={login}
@@ -145,7 +147,7 @@ export default function Home() {
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-sm text-zinc-500">Password</span>
+            <span className="mb-1 block text-sm text-zinc-500">{t('password')}</span>
             <input
               type="password"
               className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
@@ -159,7 +161,7 @@ export default function Home() {
             disabled={busy}
             className="w-full rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-500 disabled:opacity-60"
           >
-            {busy ? 'Signing in...' : 'Sign in'}
+            {busy ? t('signingIn') : t('signIn')}
           </button>
         </form>
       </div>
@@ -182,15 +184,15 @@ export default function Home() {
 
       <div className="grid grid-cols-3 gap-3">
         <Link href="/products" className="card card-hover p-4">
-          <div className="text-sm text-zinc-500">สินค้าทั้งหมด</div>
+          <div className="text-sm text-zinc-500">{t('productsAll')}</div>
           <div className="mt-1 text-3xl font-semibold">{stats?.products ?? '-'}</div>
         </Link>
         <Link href="/products?filter=low" className="card card-hover p-4">
-          <div className="text-sm text-zinc-500">สต็อกต่ำ</div>
+          <div className="text-sm text-zinc-500">{t('qtyLow')}</div>
           <div className="mt-1 text-3xl font-semibold text-amber-600">{stats?.lowStock ?? '-'}</div>
         </Link>
         <Link href="/movements" className="card card-hover p-4">
-          <div className="text-sm text-zinc-500">วันนี้</div>
+          <div className="text-sm text-zinc-500">{t('today')}</div>
           <div className="mt-1 text-3xl font-semibold">{stats?.movementsToday ?? '-'}</div>
         </Link>
       </div>
@@ -198,43 +200,49 @@ export default function Home() {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <MenuTile
           href="/products"
-          title="สินค้า"
-          subtitle="ขายและเช็กสต็อก"
+          title={t('products')}
+          subtitle={t('productsSubtitle')}
           image="/menu/products.svg"
         />
         {canManage ? (
           <MenuTile
             href="/products/new"
-            title="เพิ่มสินค้า"
-            subtitle="บันทึกสินค้าใหม่"
+            title={t('addProduct')}
+            subtitle={t('addProductSubtitle')}
             image="/menu/add-product.svg"
           />
         ) : null}
         <MenuTile
           href="/movements"
-          title="ประวัติ"
-          subtitle="ดูรายการเข้าออก"
+          title={t('viewHistory')}
+          subtitle={t('viewHistorySubtitle')}
           image="/menu/movements.svg"
         />
         {canManage ? (
           <MenuTile
             href="/admin/import-export"
-            title="นำเข้า"
-            subtitle="จัดการ CSV"
+            title={t('csvImportExport')}
+            subtitle={t('importSubtitle')}
             image="/menu/import-export.svg"
           />
         ) : null}
         {role === 'OWNER' || role === 'MANAGER' ? (
           <MenuTile
             href="/admin/users"
-            title="ผู้ใช้"
-            subtitle="เพิ่มพนักงาน"
+            title={t('users')}
+            subtitle={t('usersSubtitle')}
             image="/menu/users.svg"
           />
         ) : null}
         <MenuTile
-          title="ออก"
-          subtitle="ออกจากระบบ"
+          href="/settings"
+          title={t('settings')}
+          subtitle={t('settingsSubtitle')}
+          image="/menu/settings.svg"
+        />
+        <MenuTile
+          title={t('logout')}
+          subtitle={t('logoutSubtitle')}
           image="/menu/logout.svg"
           onClick={logout}
           tone="danger"

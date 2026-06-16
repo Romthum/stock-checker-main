@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import ImageUpload from '@/components/ImageUpload';
 import { useRole } from '@/lib/useRole';
+import { useI18n } from '@/lib/i18n';
 
 type FormState = {
   name: string;
@@ -19,6 +20,7 @@ type FormState = {
 export default function NewProductPage() {
   const router = useRouter();
   const { canManage, loading } = useRole();
+  const { t } = useI18n();
   const [form, setForm] = useState<FormState>({
     name: '',
     sku: '',
@@ -77,14 +79,14 @@ export default function NewProductPage() {
     }
   }
 
-  if (loading) return <div className="py-12 text-center text-zinc-500">Loading...</div>;
+  if (loading) return <div className="py-12 text-center text-zinc-500">{t('loading')}</div>;
   if (!canManage) {
     return (
       <div className="space-y-4">
         <button onClick={() => router.push('/')} className="rounded-lg border px-3 py-2 text-sm">
-          Home
+          {t('backToHome')}
         </button>
-        <div className="card p-5">You do not have permission to create products.</div>
+        <div className="card p-5">{t('youCannotManageProducts')}</div>
       </div>
     );
   }
@@ -93,9 +95,9 @@ export default function NewProductPage() {
     <div className="mx-auto max-w-3xl space-y-4">
       <div className="flex items-center justify-between">
         <button onClick={() => router.push('/products')} className="rounded-lg border px-3 py-2 text-sm">
-          Products
+          {t('products')}
         </button>
-        <h1 className="text-lg font-semibold">Add product</h1>
+        <h1 className="text-lg font-semibold">{t('addProduct')}</h1>
       </div>
 
       <div className="card grid gap-5 p-5 sm:grid-cols-[240px_1fr]">
@@ -103,7 +105,7 @@ export default function NewProductPage() {
 
         <div className="space-y-4">
           <label className="block">
-            <span className="mb-1 block text-sm text-zinc-500">Name</span>
+            <span className="mb-1 block text-sm text-zinc-500">{t('name')}</span>
             <input
               className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
               value={form.name}
@@ -113,7 +115,7 @@ export default function NewProductPage() {
 
           <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
             <label className="block">
-              <span className="mb-1 block text-sm text-zinc-500">SKU / Barcode</span>
+              <span className="mb-1 block text-sm text-zinc-500">{t('sku')}</span>
               <input
                 className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
                 value={form.sku}
@@ -125,12 +127,12 @@ export default function NewProductPage() {
               onClick={() => setShowScanner(true)}
               className="self-end rounded-lg bg-zinc-800 px-4 py-2 text-white dark:bg-zinc-700"
             >
-              Scan
+              {t('scan')}
             </button>
           </div>
 
           <label className="block">
-            <span className="mb-1 block text-sm text-zinc-500">Category</span>
+            <span className="mb-1 block text-sm text-zinc-500">{t('category')}</span>
             <input
               list="categories"
               className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
@@ -145,14 +147,14 @@ export default function NewProductPage() {
             {categories.length ? (
               <div className="mt-2 space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-zinc-500">Existing categories</span>
+                  <span className="text-xs text-zinc-500">{t('existingCategories')}</span>
                   {form.category ? (
                     <button
                       type="button"
                       onClick={() => setField('category', '')}
                       className="text-xs text-blue-600 hover:underline dark:text-blue-400"
                     >
-                      Clear
+                      {t('clear')}
                     </button>
                   ) : null}
                 </div>
@@ -176,18 +178,18 @@ export default function NewProductPage() {
                       );
                     })
                   ) : (
-                    <span className="text-xs text-zinc-500">No matching category. Type a new one.</span>
+                    <span className="text-xs text-zinc-500">{t('noMatchingCategory')}</span>
                   )}
                 </div>
               </div>
             ) : (
-              <div className="mt-1 text-xs text-zinc-500">Type a new category.</div>
+              <div className="mt-1 text-xs text-zinc-500">{t('typeNewCategory')}</div>
             )}
           </label>
 
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="block">
-              <span className="mb-1 block text-sm text-zinc-500">Cost</span>
+              <span className="mb-1 block text-sm text-zinc-500">{t('cost')}</span>
               <input
                 type="number"
                 className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
@@ -196,7 +198,7 @@ export default function NewProductPage() {
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm text-zinc-500">Sale price</span>
+              <span className="mb-1 block text-sm text-zinc-500">{t('salePrice')}</span>
               <input
                 type="number"
                 className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
@@ -205,7 +207,7 @@ export default function NewProductPage() {
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-sm text-zinc-500">Initial stock</span>
+              <span className="mb-1 block text-sm text-zinc-500">{t('initialStock')}</span>
               <input
                 type="number"
                 className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
@@ -223,7 +225,7 @@ export default function NewProductPage() {
               disabled={busy}
               className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-500 disabled:opacity-60"
             >
-              {busy ? 'Saving...' : 'Save product'}
+              {busy ? t('saving') : t('saveProduct')}
             </button>
           </div>
         </div>

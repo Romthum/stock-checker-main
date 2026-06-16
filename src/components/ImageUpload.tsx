@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import Image from 'next/image';
+import { useI18n } from '@/lib/i18n';
 
 export default function ImageUpload({
   value,
@@ -10,6 +11,7 @@ export default function ImageUpload({
   value?: string;
   onChange: (url: string) => void;
 }) {
+  const { t } = useI18n();
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -45,9 +47,9 @@ export default function ImageUpload({
         className="relative flex aspect-square w-full max-w-xs items-center justify-center overflow-hidden rounded-lg border border-dashed border-zinc-300 bg-zinc-50 text-center text-sm text-zinc-500 transition hover:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400"
       >
         {value ? (
-          <Image src={value} alt="Product" fill unoptimized className="object-cover" />
+          <Image src={value} alt={t('product')} fill unoptimized className="object-cover" />
         ) : (
-          <span>{busy ? 'Uploading...' : 'Upload product image'}</span>
+          <span>{busy ? t('uploading') : t('uploadProductImage')}</span>
         )}
       </button>
       {error ? <div className="text-sm text-red-600 dark:text-red-400">{error}</div> : null}

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import ImageUpload from './ImageUpload';
+import { useI18n } from '@/lib/i18n';
 
 type Product = {
   id: string;
@@ -22,6 +23,7 @@ type Props = {
 };
 
 export default function EditProductModal({ open, onClose, product, onSaved }: Props) {
+  const { t } = useI18n();
   const [form, setForm] = useState<Product>({
     id: '',
     name: '',
@@ -81,7 +83,7 @@ export default function EditProductModal({ open, onClose, product, onSaved }: Pr
   }
 
   async function del() {
-    if (!confirm(`Delete "${form.name}"?`)) return;
+    if (!confirm(t('deleteConfirm'))) return;
     setBusy(true);
     setError('');
     try {
@@ -102,15 +104,15 @@ export default function EditProductModal({ open, onClose, product, onSaved }: Pr
       <div className="flex max-h-[100dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-xl sm:max-h-[calc(100dvh-2rem)] sm:max-w-2xl sm:rounded-lg">
         <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 bg-zinc-950 px-4 py-3 sm:px-5">
           <div className="min-w-0">
-            <h2 className="truncate text-lg font-semibold">Edit product</h2>
-            <p className="truncate text-xs text-zinc-500">{form.sku || form.name || 'Product details'}</p>
+            <h2 className="truncate text-lg font-semibold">{t('editProduct')}</h2>
+            <p className="truncate text-xs text-zinc-500">{form.sku || form.name || t('productDetails')}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="rounded-lg px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-900 hover:text-white"
           >
-            Close
+            {t('close')}
           </button>
         </div>
 
@@ -125,7 +127,7 @@ export default function EditProductModal({ open, onClose, product, onSaved }: Pr
 
             <div className="space-y-3">
               <label className="block">
-                <span className="mb-1 block text-sm text-zinc-400">Name</span>
+                <span className="mb-1 block text-sm text-zinc-400">{t('name')}</span>
                 <input
                   className="h-12 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-base"
                   value={form.name}
@@ -135,7 +137,7 @@ export default function EditProductModal({ open, onClose, product, onSaved }: Pr
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block">
-                  <span className="mb-1 block text-sm text-zinc-400">SKU / Barcode</span>
+                  <span className="mb-1 block text-sm text-zinc-400">{t('sku')}</span>
                   <input
                     className="h-12 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-base"
                     value={form.sku ?? ''}
@@ -143,7 +145,7 @@ export default function EditProductModal({ open, onClose, product, onSaved }: Pr
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-sm text-zinc-400">Category</span>
+                  <span className="mb-1 block text-sm text-zinc-400">{t('category')}</span>
                   <input
                     className="h-12 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-base"
                     value={form.category ?? ''}
@@ -154,7 +156,7 @@ export default function EditProductModal({ open, onClose, product, onSaved }: Pr
 
               <div className="grid gap-3 sm:grid-cols-3">
                 <label className="block">
-                  <span className="mb-1 block text-sm text-zinc-400">Cost</span>
+                  <span className="mb-1 block text-sm text-zinc-400">{t('cost')}</span>
                   <input
                     type="number"
                     className="h-12 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-base"
@@ -163,7 +165,7 @@ export default function EditProductModal({ open, onClose, product, onSaved }: Pr
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-sm text-zinc-400">Price</span>
+                  <span className="mb-1 block text-sm text-zinc-400">{t('price')}</span>
                   <input
                     type="number"
                     className="h-12 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-base"
@@ -172,7 +174,7 @@ export default function EditProductModal({ open, onClose, product, onSaved }: Pr
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-sm text-zinc-400">Stock</span>
+                  <span className="mb-1 block text-sm text-zinc-400">{t('stock')}</span>
                   <input
                     type="number"
                     className="h-12 w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 text-base"
@@ -194,7 +196,7 @@ export default function EditProductModal({ open, onClose, product, onSaved }: Pr
             disabled={busy}
             className="h-12 rounded-lg bg-red-600 px-4 text-white hover:bg-red-500 disabled:opacity-60 sm:h-10"
           >
-            Delete
+            {t('delete')}
           </button>
           <button
             type="button"
@@ -202,7 +204,7 @@ export default function EditProductModal({ open, onClose, product, onSaved }: Pr
             disabled={busy}
             className="h-12 rounded-lg bg-blue-600 px-4 text-white hover:bg-blue-500 disabled:opacity-60 sm:h-10"
           >
-            {busy ? 'Saving...' : 'Save'}
+            {busy ? t('saving') : t('save')}
           </button>
         </div>
       </div>

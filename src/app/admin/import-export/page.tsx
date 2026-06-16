@@ -3,11 +3,13 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useRole } from '@/lib/useRole';
+import { useI18n } from '@/lib/i18n';
 
 type CSVRow = Record<string, string>;
 
 export default function ImportExportPage() {
   const { canManage, loading } = useRole();
+  const { t } = useI18n();
   const [rows, setRows] = useState<CSVRow[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
   const [mapName, setMapName] = useState('name');
@@ -83,7 +85,7 @@ export default function ImportExportPage() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Import failed');
-      setMessage(`Imported ${json.imported} products`);
+      setMessage(t('importedProducts', { count: json.imported }));
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Import failed');
     } finally {
@@ -91,14 +93,14 @@ export default function ImportExportPage() {
     }
   }
 
-  if (loading) return <div className="py-12 text-center text-zinc-500">Loading...</div>;
+  if (loading) return <div className="py-12 text-center text-zinc-500">{t('loading')}</div>;
   if (!canManage) {
     return (
       <div className="space-y-4">
         <Link href="/" className="rounded-lg border px-3 py-2 text-sm">
-          Home
+          {t('backToHome')}
         </Link>
-        <div className="card p-5">You do not have permission to import products.</div>
+        <div className="card p-5">{t('youCannotImport')}</div>
       </div>
     );
   }
@@ -107,29 +109,29 @@ export default function ImportExportPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <Link href="/" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700">
-          Home
+          {t('backToHome')}
         </Link>
-        <h1 className="text-lg font-semibold">Import / Export</h1>
+        <h1 className="text-lg font-semibold">{t('csvImportExport')}</h1>
       </div>
 
       <div className="card flex flex-wrap items-center justify-between gap-3 p-4">
         <div>
-          <div className="font-medium">Export product CSV</div>
-          <div className="text-sm text-zinc-500">Downloads all active products from local PostgreSQL.</div>
+          <div className="font-medium">{t('exportCsv')}</div>
+          <div className="text-sm text-zinc-500">{t('exportDescription')}</div>
         </div>
         <a
           href="/api/admin/export-products"
           className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-500"
         >
-          Download CSV
+          {t('downloadCsv')}
         </a>
       </div>
 
       <div className="card space-y-4 p-4">
         <div>
-          <div className="font-medium">Import product CSV</div>
+          <div className="font-medium">{t('importCsv')}</div>
           <div className="text-sm text-zinc-500">
-            Supported columns: name, sku, category, cost_price, sale_price, image_url
+            {t('csvColumns')}
           </div>
         </div>
 
@@ -138,12 +140,12 @@ export default function ImportExportPage() {
         {headers.length ? (
           <div className="grid gap-3 sm:grid-cols-3">
             {[
-              ['Name', mapName, setMapName],
+              [t('name'), mapName, setMapName],
               ['SKU', mapSku, setMapSku],
-              ['Category', mapCategory, setMapCategory],
-              ['Cost', mapCost, setMapCost],
-              ['Sale price', mapSale, setMapSale],
-              ['Image URL', mapImage, setMapImage],
+              [t('category'), mapCategory, setMapCategory],
+              [t('cost'), mapCost, setMapCost],
+              [t('salePrice'), mapSale, setMapSale],
+              [t('imageUrl'), mapImage, setMapImage],
             ].map(([label, value, setter]) => (
               <label key={label as string} className="block">
                 <span className="mb-1 block text-xs text-zinc-500">{label as string}</span>
@@ -152,7 +154,7 @@ export default function ImportExportPage() {
                   onChange={(e) => (setter as (value: string) => void)(e.target.value)}
                   className="w-full rounded-lg border border-zinc-300 bg-white px-2 py-2 dark:border-zinc-700 dark:bg-zinc-950"
                 >
-                  <option value="">None</option>
+                  <option value="">{t('none')}</option>
                   {headers.map((header) => (
                     <option key={header} value={header}>
                       {header}
@@ -199,7 +201,7 @@ export default function ImportExportPage() {
             onClick={importRows}
             className="rounded-lg bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-500 disabled:opacity-60"
           >
-            {busy ? 'Importing...' : `Import ${rows.length} rows`}
+            {busy ? t('importing') : t('importRows', { count: rows.length })}
           </button>
         </div>
       </div>

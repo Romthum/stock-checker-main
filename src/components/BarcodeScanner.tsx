@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useI18n } from '@/lib/i18n';
 
 type Props = {
   onDetected: (code: string) => void;
@@ -26,6 +27,7 @@ declare global {
 }
 
 export default function BarcodeScanner({ onDetected, onClose }: Props) {
+  const { t } = useI18n();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [error, setError] = useState('');
@@ -38,7 +40,7 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
     async function start() {
       if (!window.BarcodeDetector) {
         setNativeSupported(false);
-        setError('BarcodeDetector is not supported in this browser. Enter the code manually.');
+        setError(t('barcodeUnsupported'));
         return;
       }
 
@@ -80,7 +82,7 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
 
         requestAnimationFrame(tick);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Camera failed');
+        setError(err instanceof Error ? err.message : t('cameraFailed'));
       }
     }
 
@@ -90,7 +92,7 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
       stopped = true;
       streamRef.current?.getTracks().forEach((track) => track.stop());
     };
-  }, [onDetected]);
+  }, [onDetected, t]);
 
   function submitManual() {
     const code = manualCode.trim();
@@ -101,9 +103,9 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/85 p-4 text-white">
       <div className="w-full max-w-3xl space-y-3">
         <div className="flex items-center justify-between">
-          <strong>Scan barcode</strong>
+          <strong>{t('scanBarcode')}</strong>
           <button onClick={onClose} className="rounded-lg bg-white/10 px-3 py-1.5 hover:bg-white/20">
-            Close
+            {t('close')}
           </button>
         </div>
 
@@ -117,7 +119,7 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
         ) : null}
 
         <div className="rounded-lg border border-white/15 bg-white/10 p-3">
-          <div className="mb-2 text-sm text-white/70">Manual barcode entry</div>
+          <div className="mb-2 text-sm text-white/70">{t('manualBarcode')}</div>
           <div className="flex gap-2">
             <input
               value={manualCode}
@@ -126,11 +128,11 @@ export default function BarcodeScanner({ onDetected, onClose }: Props) {
                 if (e.key === 'Enter') submitManual();
               }}
               className="min-w-0 flex-1 rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-white"
-              placeholder="Enter barcode"
+              placeholder={t('enterBarcode')}
               autoFocus={!nativeSupported}
             />
             <button onClick={submitManual} className="rounded-lg bg-blue-600 px-4 py-2 hover:bg-blue-500">
-              Use
+              {t('use')}
             </button>
           </div>
         </div>
