@@ -11,17 +11,28 @@ export type CurrentUser = {
   role: Exclude<Role, null>;
 };
 
+const AUTH_CHECK_TIMEOUT_MS = 8000;
+
 export function useRole() {
   const [user, setUser] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   async function refresh() {
     setLoading(true);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), AUTH_CHECK_TIMEOUT_MS);
     try {
-      const res = await fetch('/api/auth/me', { cache: 'no-store' });
+      const res = await fetch('/api/auth/me', { cache: 'no-store', signal: controller.signal });
+      if (!res.ok) {
+        setUser(null);
+        return;
+      }
       const json = await res.json();
       setUser(json.user ?? null);
+    } catch {
+      setUser(null);
     } finally {
+      window.clearTimeout(timeout);
       setLoading(false);
     }
   }

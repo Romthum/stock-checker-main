@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { FormEvent, useEffect, useState } from 'react';
 import { useRole, type CurrentUser } from '@/lib/useRole';
 
@@ -9,6 +10,53 @@ type Stats = {
   lowStock: number;
   movementsToday: number;
 };
+
+type MenuTileProps = {
+  title: string;
+  subtitle: string;
+  image: string;
+  href?: string;
+  onClick?: () => void;
+  tone?: 'default' | 'danger';
+};
+
+function MenuTile({ title, subtitle, image, href, onClick, tone = 'default' }: MenuTileProps) {
+  const content = (
+    <>
+      <div className="relative mx-auto mt-3 aspect-square w-[58%] max-w-28">
+        <Image src={image} alt="" fill priority={false} className="object-contain" />
+      </div>
+      <div className="flex min-h-20 flex-1 flex-col items-center justify-center px-2 pb-3 text-center">
+        <div
+          className={`text-lg font-semibold leading-tight sm:text-xl ${
+            tone === 'danger' ? 'text-red-700 dark:text-red-300' : 'text-zinc-950 dark:text-zinc-50'
+          }`}
+        >
+          {title}
+        </div>
+        <div className="mt-1 text-xs leading-snug text-zinc-500 dark:text-zinc-400 sm:text-sm">
+          {subtitle}
+        </div>
+      </div>
+    </>
+  );
+  const className =
+    'card card-hover flex aspect-square min-h-36 flex-col overflow-hidden p-2 transition active:scale-[0.99]';
+
+  if (href) {
+    return (
+      <Link href={href} className={className}>
+        {content}
+      </Link>
+    );
+  }
+
+  return (
+    <button type="button" onClick={onClick} className={`${className} w-full`}>
+      {content}
+    </button>
+  );
+}
 
 export default function Home() {
   const { user, role, canManage, loading, refresh } = useRole();
@@ -106,61 +154,72 @@ export default function Home() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Local POS</h1>
+          <h1 className="text-3xl font-semibold">Local POS</h1>
           <p className="text-sm text-zinc-500">
             {user.display_name} ({role})
           </p>
         </div>
-        <button
-          onClick={logout}
-          className="rounded-lg border border-zinc-300 px-4 py-2 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900"
-        >
-          Sign out
-        </button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-3 gap-3">
         <Link href="/products" className="card card-hover p-4">
-          <div className="text-sm text-zinc-500">Products</div>
+          <div className="text-sm text-zinc-500">สินค้าทั้งหมด</div>
           <div className="mt-1 text-3xl font-semibold">{stats?.products ?? '-'}</div>
         </Link>
         <Link href="/products?filter=low" className="card card-hover p-4">
-          <div className="text-sm text-zinc-500">Low stock</div>
+          <div className="text-sm text-zinc-500">สต็อกต่ำ</div>
           <div className="mt-1 text-3xl font-semibold text-amber-600">{stats?.lowStock ?? '-'}</div>
         </Link>
         <Link href="/movements" className="card card-hover p-4">
-          <div className="text-sm text-zinc-500">Movements today</div>
+          <div className="text-sm text-zinc-500">วันนี้</div>
           <div className="mt-1 text-3xl font-semibold">{stats?.movementsToday ?? '-'}</div>
         </Link>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Link href="/products" className="card card-hover p-5">
-          <div className="font-medium">Products and stock</div>
-          <div className="mt-1 text-sm text-zinc-500">Search, scan barcode, sell, restock.</div>
-        </Link>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <MenuTile
+          href="/products"
+          title="สินค้า"
+          subtitle="ขายและเช็กสต็อก"
+          image="/menu/products.svg"
+        />
         {canManage ? (
-          <Link href="/products/new" className="card card-hover p-5">
-            <div className="font-medium">Add product</div>
-            <div className="mt-1 text-sm text-zinc-500">Create catalog items and initial stock.</div>
-          </Link>
+          <MenuTile
+            href="/products/new"
+            title="เพิ่มสินค้า"
+            subtitle="บันทึกสินค้าใหม่"
+            image="/menu/add-product.svg"
+          />
         ) : null}
-        <Link href="/movements" className="card card-hover p-5">
-          <div className="font-medium">Stock movements</div>
-          <div className="mt-1 text-sm text-zinc-500">Review sales, restocks, and adjustments.</div>
-        </Link>
+        <MenuTile
+          href="/movements"
+          title="ประวัติ"
+          subtitle="ดูรายการเข้าออก"
+          image="/menu/movements.svg"
+        />
         {canManage ? (
-          <Link href="/admin/import-export" className="card card-hover p-5">
-            <div className="font-medium">Import / Export</div>
-            <div className="mt-1 text-sm text-zinc-500">Bulk manage product data with CSV.</div>
-          </Link>
+          <MenuTile
+            href="/admin/import-export"
+            title="นำเข้า"
+            subtitle="จัดการ CSV"
+            image="/menu/import-export.svg"
+          />
         ) : null}
         {role === 'OWNER' || role === 'MANAGER' ? (
-          <Link href="/admin/users" className="card card-hover p-5">
-            <div className="font-medium">Users</div>
-            <div className="mt-1 text-sm text-zinc-500">Manage staff accounts and roles.</div>
-          </Link>
+          <MenuTile
+            href="/admin/users"
+            title="ผู้ใช้"
+            subtitle="เพิ่มพนักงาน"
+            image="/menu/users.svg"
+          />
         ) : null}
+        <MenuTile
+          title="ออก"
+          subtitle="ออกจากระบบ"
+          image="/menu/logout.svg"
+          onClick={logout}
+          tone="danger"
+        />
       </div>
     </div>
   );
