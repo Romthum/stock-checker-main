@@ -67,6 +67,23 @@ export async function POST(req: Request) {
         `update products set qty = $2, updated_at = now() where id = $1 returning qty`,
         [product.id, nextQty]
       );
+      await client.query(
+        `
+        insert into audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, 'STOCK_ADJUST', 'product', $2, $3::jsonb)
+        `,
+        [
+          user.id,
+          product.id,
+          JSON.stringify({
+            delta: body.delta,
+            reason: body.reason,
+            note: body.note ?? null,
+            previous_qty: product.qty,
+            next_qty: updated.rows[0].qty,
+          }),
+        ]
+      );
       return { ok: true as const, qty: updated.rows[0].qty };
     });
 

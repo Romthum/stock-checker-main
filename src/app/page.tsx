@@ -75,8 +75,8 @@ function MenuTile({ title, subtitle, image, href, onClick, tone = 'default' }: M
 }
 
 export default function Home() {
-  const { user, role, canManage, loading, refresh } = useRole();
-  const { t } = useI18n();
+  const { user, role, canManage, canViewReports, loading, refresh } = useRole();
+  const { language, t } = useI18n();
   const [stats, setStats] = useState<Stats | null>(null);
   const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
@@ -218,6 +218,14 @@ export default function Home() {
           subtitle={t('viewHistorySubtitle')}
           image="/menu/movements.svg"
         />
+        {canViewReports ? (
+          <MenuTile
+            href="/audit"
+            title={language === 'th' ? 'บันทึกใช้งาน' : 'Audit'}
+            subtitle={language === 'th' ? 'ดูว่าใครทำอะไร' : 'Who did what'}
+            image="/menu/audit.svg"
+          />
+        ) : null}
         {canManage ? (
           <MenuTile
             href="/admin/import-export"

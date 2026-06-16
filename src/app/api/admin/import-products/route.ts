@@ -69,6 +69,13 @@ export async function POST(req: Request) {
         );
         count += 1;
       }
+      await client.query(
+        `
+        insert into audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, 'PRODUCT_IMPORT', 'product', null, $2::jsonb)
+        `,
+        [user.id, JSON.stringify({ rows: count })]
+      );
       return count;
     });
 

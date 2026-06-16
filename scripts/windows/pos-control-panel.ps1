@@ -30,6 +30,8 @@ $script:Port = $Port
 $script:LogDir = Join-Path $script:ProjectDir "data\logs"
 $script:ConfigPath = Join-Path $script:ProjectDir "data\control-panel-settings.json"
 $script:PanelLogPath = Join-Path $script:LogDir "control-panel.log"
+$script:UpdateLogPath = Join-Path $script:LogDir "update.log"
+$script:DefaultBackupDir = Join-Path $script:ProjectDir "backups\local"
 $script:CurrentLanUrl = $null
 $script:LastLogPath = $null
 $script:LastKnownServerState = $null
@@ -38,6 +40,8 @@ $script:LastAlertSignature = $null
 $script:LastAlertAt = $null
 $script:ValidateOnlyMode = [bool]$ValidateOnly
 $script:EmailStatusControl = $null
+$script:BackupStatusControl = $null
+$script:UpdateStatusControl = $null
 
 New-Item -ItemType Directory -Force $script:LogDir | Out-Null
 
@@ -74,12 +78,39 @@ function Set-EmailStatus {
   }
 }
 
+function Set-BackupStatus {
+  param([string]$Text, [bool]$IsError = $false)
+  if ($null -ne $script:BackupStatusControl) {
+    $script:BackupStatusControl.Text = $Text
+    $script:BackupStatusControl.ForeColor = if ($IsError) {
+      [System.Drawing.Color]::FromArgb(248, 113, 113)
+    }
+    else {
+      [System.Drawing.Color]::FromArgb(180, 186, 195)
+    }
+  }
+}
+
+function Set-UpdateStatus {
+  param([string]$Text, [bool]$IsError = $false)
+  if ($null -ne $script:UpdateStatusControl) {
+    $script:UpdateStatusControl.Text = $Text
+    $script:UpdateStatusControl.ForeColor = if ($IsError) {
+      [System.Drawing.Color]::FromArgb(248, 113, 113)
+    }
+    else {
+      [System.Drawing.Color]::FromArgb(180, 186, 195)
+    }
+  }
+}
+
 function Get-EmailSettings {
   $defaults = [pscustomobject]@{
     AlertEmail = ""
     SmtpEmail = ""
     SmtpPassword = ""
     AutoEmailAlerts = $false
+    BackupDir = $script:DefaultBackupDir
     LastSavedAt = $null
   }
 
@@ -93,6 +124,7 @@ function Get-EmailSettings {
     $smtpEmail = if ($null -ne $settings.SmtpEmail) { [string]$settings.SmtpEmail } else { "" }
     $smtpPassword = if ($null -ne $settings.SmtpPassword) { [string]$settings.SmtpPassword } else { "" }
     $autoEmailAlerts = if ($null -ne $settings.AutoEmailAlerts) { [bool]$settings.AutoEmailAlerts } else { $false }
+    $backupDir = if ($null -ne $settings.BackupDir -and -not [string]::IsNullOrWhiteSpace([string]$settings.BackupDir)) { [string]$settings.BackupDir } else { $script:DefaultBackupDir }
     $lastSavedAt = if ($null -ne $settings.LastSavedAt) { $settings.LastSavedAt } else { $null }
 
     return [pscustomobject]@{
@@ -100,6 +132,7 @@ function Get-EmailSettings {
       SmtpEmail = $smtpEmail
       SmtpPassword = $smtpPassword
       AutoEmailAlerts = $autoEmailAlerts
+      BackupDir = $backupDir
       LastSavedAt = $lastSavedAt
     }
   }
@@ -156,12 +189,37 @@ function Save-EmailSettings {
     SmtpEmail = $SmtpEmail.Trim()
     SmtpPassword = $encryptedPassword
     AutoEmailAlerts = $AutoEmailAlerts
+    BackupDir = $existing.BackupDir
     LastSavedAt = (Get-Date).ToString("o")
   }
 
   New-Item -ItemType Directory -Force (Split-Path $script:ConfigPath) | Out-Null
   $settings | ConvertTo-Json | Set-Content -Path $script:ConfigPath -Encoding utf8
   Write-PanelLog "Email settings saved."
+}
+
+function Save-BackupSettings {
+  param([string]$BackupDir)
+  $existing = Get-EmailSettings
+  $settings = [ordered]@{
+    AlertEmail = $existing.AlertEmail
+    SmtpEmail = $existing.SmtpEmail
+    SmtpPassword = $existing.SmtpPassword
+    AutoEmailAlerts = $existing.AutoEmailAlerts
+    BackupDir = $BackupDir.Trim()
+    LastSavedAt = (Get-Date).ToString("o")
+  }
+  New-Item -ItemType Directory -Force (Split-Path $script:ConfigPath) | Out-Null
+  $settings | ConvertTo-Json | Set-Content -Path $script:ConfigPath -Encoding utf8
+  Write-PanelLog "Backup folder saved: $BackupDir"
+}
+
+function Get-BackupDir {
+  $settings = Get-EmailSettings
+  if ([string]::IsNullOrWhiteSpace($settings.BackupDir)) {
+    return $script:DefaultBackupDir
+  }
+  return $settings.BackupDir
 }
 
 function Test-EmailSettingsConfigured {
@@ -431,6 +489,172 @@ function Invoke-AutomaticEmailAlert {
   }
 }
 
+function New-LocalBackup {
+  param([string]$Reason = "manual")
+
+  $backupDir = Get-BackupDir
+  New-Item -ItemType Directory -Force $backupDir | Out-Null
+
+  $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+  $destination = Join-Path $backupDir "pos-local-$timestamp.zip"
+  $staging = Join-Path ([System.IO.Path]::GetTempPath()) "pos-backup-$([guid]::NewGuid().ToString('N'))"
+  New-Item -ItemType Directory -Force $staging | Out-Null
+
+  try {
+    $storeFile = Join-Path $script:ProjectDir "data\dev-store.json"
+    if (Test-Path $storeFile) {
+      Copy-Item -LiteralPath $storeFile -Destination (Join-Path $staging "dev-store.json") -Force
+    }
+
+    $uploadsDir = Join-Path $script:ProjectDir "data\uploads"
+    if (Test-Path $uploadsDir) {
+      Copy-Item -LiteralPath $uploadsDir -Destination (Join-Path $staging "uploads") -Recurse -Force
+    }
+
+    $manifest = [ordered]@{
+      app = "Local POS"
+      createdAt = (Get-Date).ToString("o")
+      reason = $Reason
+      projectDir = $script:ProjectDir
+      port = $script:Port
+    }
+    $manifest | ConvertTo-Json | Set-Content -Path (Join-Path $staging "manifest.json") -Encoding utf8
+
+    if (Test-Path $destination) {
+      Remove-Item -LiteralPath $destination -Force
+    }
+    Compress-Archive -Path (Join-Path $staging "*") -DestinationPath $destination -Force
+    Write-PanelLog "Backup created: $destination"
+    return $destination
+  }
+  finally {
+    if (Test-Path $staging) {
+      Remove-Item -LiteralPath $staging -Recurse -Force
+    }
+  }
+}
+
+function Restore-LocalBackup {
+  param([string]$BackupFile)
+
+  if (-not (Test-Path $BackupFile)) {
+    throw "Backup file not found."
+  }
+
+  $dataDir = Join-Path $script:ProjectDir "data"
+  $uploadsTarget = Join-Path $dataDir "uploads"
+  $dataFull = [System.IO.Path]::GetFullPath($dataDir)
+  $uploadsFull = [System.IO.Path]::GetFullPath($uploadsTarget)
+  if (-not $uploadsFull.StartsWith($dataFull, [System.StringComparison]::OrdinalIgnoreCase)) {
+    throw "Uploads restore path is outside the data folder."
+  }
+
+  [void](New-LocalBackup "pre-restore")
+  $wasRunning = $null -ne (Get-ServerListener)
+  if ($wasRunning) {
+    Stop-PosServer
+    Start-Sleep -Seconds 1
+  }
+
+  $staging = Join-Path ([System.IO.Path]::GetTempPath()) "pos-restore-$([guid]::NewGuid().ToString('N'))"
+  New-Item -ItemType Directory -Force $staging | Out-Null
+  try {
+    Expand-Archive -LiteralPath $BackupFile -DestinationPath $staging -Force
+    New-Item -ItemType Directory -Force $dataDir | Out-Null
+
+    $storeSource = Join-Path $staging "dev-store.json"
+    if (Test-Path $storeSource) {
+      Copy-Item -LiteralPath $storeSource -Destination (Join-Path $dataDir "dev-store.json") -Force
+    }
+
+    $uploadsSource = Join-Path $staging "uploads"
+    if (Test-Path $uploadsSource) {
+      if (Test-Path $uploadsTarget) {
+        Remove-Item -LiteralPath $uploadsTarget -Recurse -Force
+      }
+      Copy-Item -LiteralPath $uploadsSource -Destination $uploadsTarget -Recurse -Force
+    }
+
+    Write-PanelLog "Backup restored: $BackupFile"
+  }
+  finally {
+    if (Test-Path $staging) {
+      Remove-Item -LiteralPath $staging -Recurse -Force
+    }
+  }
+
+  if ($wasRunning) {
+    Start-PosServer
+  }
+}
+
+function Invoke-PanelCommand {
+  param(
+    [string]$Command,
+    [string[]]$Arguments,
+    [string]$Title
+  )
+
+  $line = "> $Command $($Arguments -join ' ')"
+  Add-Content -Path $script:UpdateLogPath -Value "`r`n[$(Get-Date -Format "yyyy-MM-dd HH:mm:ss")] $Title`r`n$line" -Encoding utf8
+  $output = & $Command @Arguments 2>&1
+  $exitCode = if ($null -ne $LASTEXITCODE) { $LASTEXITCODE } else { 0 }
+  if ($output) {
+    Add-Content -Path $script:UpdateLogPath -Value ($output | Out-String) -Encoding utf8
+  }
+  if ($exitCode -ne 0) {
+    throw "$Title failed with exit code $exitCode. See data\logs\update.log."
+  }
+  return ($output | Out-String).Trim()
+}
+
+function Get-GitUpdateStatus {
+  Set-Location $script:ProjectDir
+  Invoke-PanelCommand "git" @("fetch", "origin") "Fetch latest from GitHub" | Out-Null
+  $branch = (Invoke-PanelCommand "git" @("branch", "--show-current") "Read branch").Trim()
+  if ([string]::IsNullOrWhiteSpace($branch)) {
+    $branch = "main"
+  }
+  $remote = "origin/$branch"
+  $behind = (Invoke-PanelCommand "git" @("rev-list", "--count", "HEAD..$remote") "Check updates").Trim()
+  $dirty = (Invoke-PanelCommand "git" @("status", "--porcelain") "Check local changes").Trim()
+  if (-not [string]::IsNullOrWhiteSpace($dirty)) {
+    return "Local files changed. Commit or discard before updating."
+  }
+  if ([int]$behind -gt 0) {
+    return "Update available: $behind commit(s) behind $remote."
+  }
+  return "Already up to date on $branch."
+}
+
+function Invoke-GitHubUpdate {
+  Set-Location $script:ProjectDir
+  $dirty = (Invoke-PanelCommand "git" @("status", "--porcelain") "Check local changes").Trim()
+  if (-not [string]::IsNullOrWhiteSpace($dirty)) {
+    throw "Local files changed. Commit or discard before updating."
+  }
+
+  $backup = New-LocalBackup "before-github-update"
+  Write-PanelLog "Backup before update: $backup"
+
+  $wasRunning = $null -ne (Get-ServerListener)
+  if ($wasRunning) {
+    Stop-PosServer
+    Start-Sleep -Seconds 1
+  }
+
+  try {
+    Invoke-PanelCommand "git" @("pull", "--ff-only", "origin", "main") "Pull latest code" | Out-Null
+    Invoke-PanelCommand "npm.cmd" @("install") "Install dependencies" | Out-Null
+    Invoke-PanelCommand "npm.cmd" @("run", "build") "Build app" | Out-Null
+  }
+  finally {
+    if ($wasRunning) {
+      Start-PosServer
+    }
+  }
+}
+
 function Start-PosServer {
   $listener = Get-ServerListener
   if ($listener) {
@@ -514,8 +738,9 @@ function New-Label {
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Local POS Control Panel"
 $form.StartPosition = "CenterScreen"
-$form.Size = New-Size 980 860
+$form.Size = New-Size 980 980
 $form.MinimumSize = New-Size 860 760
+$form.AutoScroll = $true
 $form.BackColor = [System.Drawing.Color]::FromArgb(18, 20, 24)
 $form.ForeColor = [System.Drawing.Color]::White
 $form.Font = New-Object System.Drawing.Font -ArgumentList "Segoe UI", 10
@@ -655,17 +880,70 @@ $emailStatus.ForeColor = [System.Drawing.Color]::FromArgb(180, 186, 195)
 $emailPanel.Controls.Add($emailStatus)
 $script:EmailStatusControl = $emailStatus
 
-$logLabel = New-Label "Server log" 22 572 220 24 12 ([System.Drawing.FontStyle]::Bold)
+$backupPanel = New-Object System.Windows.Forms.Panel
+$backupPanel.Location = New-Point 20 568
+$backupPanel.Size = New-Size 920 118
+$backupPanel.Anchor = "Top,Left,Right"
+$backupPanel.BackColor = [System.Drawing.Color]::FromArgb(28, 31, 38)
+$form.Controls.Add($backupPanel)
+
+$backupTitle = New-Label "Backup / Restore" 18 12 220 24 12 ([System.Drawing.FontStyle]::Bold)
+$backupPanel.Controls.Add($backupTitle)
+
+$txtBackupDir = New-Object System.Windows.Forms.TextBox
+$txtBackupDir.Location = New-Point 18 44
+$txtBackupDir.Size = New-Size 440 25
+$txtBackupDir.BorderStyle = "FixedSingle"
+$txtBackupDir.BackColor = [System.Drawing.Color]::FromArgb(12, 14, 18)
+$txtBackupDir.ForeColor = [System.Drawing.Color]::White
+$txtBackupDir.Font = New-Object System.Drawing.Font -ArgumentList "Segoe UI", 10
+$backupPanel.Controls.Add($txtBackupDir)
+
+$btnChooseBackupDir = New-Button "Choose Folder" 470 40 132 34 ([System.Drawing.Color]::FromArgb(82, 92, 110))
+$btnBackupNow = New-Button "Backup Now" 612 40 124 34 ([System.Drawing.Color]::FromArgb(20, 132, 82))
+$btnRestoreBackup = New-Button "Restore ZIP..." 746 40 138 34 ([System.Drawing.Color]::FromArgb(180, 55, 55))
+$backupPanel.Controls.AddRange(@($btnChooseBackupDir, $btnBackupNow, $btnRestoreBackup))
+
+$backupStatus = New-Label "Backups include data/dev-store.json and uploaded product images." 18 84 860 22 9
+$backupStatus.ForeColor = [System.Drawing.Color]::FromArgb(180, 186, 195)
+$backupPanel.Controls.Add($backupStatus)
+$script:BackupStatusControl = $backupStatus
+
+$updatePanel = New-Object System.Windows.Forms.Panel
+$updatePanel.Location = New-Point 20 704
+$updatePanel.Size = New-Size 920 118
+$updatePanel.Anchor = "Top,Left,Right"
+$updatePanel.BackColor = [System.Drawing.Color]::FromArgb(28, 31, 38)
+$form.Controls.Add($updatePanel)
+
+$updateTitle = New-Label "GitHub Update" 18 12 220 24 12 ([System.Drawing.FontStyle]::Bold)
+$updatePanel.Controls.Add($updateTitle)
+
+$updateHelp = New-Label "Creates a backup, pulls latest main, installs dependencies, builds, and restarts the server." 200 14 680 22 9
+$updateHelp.ForeColor = [System.Drawing.Color]::FromArgb(180, 186, 195)
+$updatePanel.Controls.Add($updateHelp)
+
+$btnCheckUpdate = New-Button "Check Update" 18 44 150 36 ([System.Drawing.Color]::FromArgb(82, 92, 110))
+$btnPullUpdate = New-Button "Pull + Build + Restart" 178 44 220 36 ([System.Drawing.Color]::FromArgb(37, 99, 235))
+$btnOpenUpdateLog = New-Button "Open Update Log" 408 44 170 36 ([System.Drawing.Color]::FromArgb(82, 92, 110))
+$updatePanel.Controls.AddRange(@($btnCheckUpdate, $btnPullUpdate, $btnOpenUpdateLog))
+
+$updateStatus = New-Label "Update log: data/logs/update.log" 18 86 860 22 9
+$updateStatus.ForeColor = [System.Drawing.Color]::FromArgb(180, 186, 195)
+$updatePanel.Controls.Add($updateStatus)
+$script:UpdateStatusControl = $updateStatus
+
+$logLabel = New-Label "Server log" 22 842 220 24 12 ([System.Drawing.FontStyle]::Bold)
 $form.Controls.Add($logLabel)
 
-$logPathLabel = New-Label "Log file: -" 150 575 790 22 9
+$logPathLabel = New-Label "Log file: -" 150 845 790 22 9
 $logPathLabel.Anchor = "Top,Left,Right"
 $logPathLabel.ForeColor = [System.Drawing.Color]::FromArgb(160, 166, 175)
 $form.Controls.Add($logPathLabel)
 
 $logBox = New-Object System.Windows.Forms.TextBox
-$logBox.Location = New-Point 20 602
-$logBox.Size = New-Size 920 170
+$logBox.Location = New-Point 20 872
+$logBox.Size = New-Size 920 130
 $logBox.Anchor = "Top,Bottom,Left,Right"
 $logBox.Multiline = $true
 $logBox.ScrollBars = "Vertical"
@@ -676,9 +954,9 @@ $logBox.ForeColor = [System.Drawing.Color]::FromArgb(220, 225, 235)
 $logBox.Font = New-Object System.Drawing.Font -ArgumentList "Consolas", 9
 $form.Controls.Add($logBox)
 
-$btnOpenLogs = New-Button "Open Logs Folder" 20 790 150 34 ([System.Drawing.Color]::FromArgb(82, 92, 110))
-$btnOpenData = New-Button "Open Data Folder" 180 790 150 34 ([System.Drawing.Color]::FromArgb(82, 92, 110))
-$btnClearPanelLog = New-Button "Clear Panel Log" 340 790 145 34 ([System.Drawing.Color]::FromArgb(82, 92, 110))
+$btnOpenLogs = New-Button "Open Logs Folder" 20 1020 150 34 ([System.Drawing.Color]::FromArgb(82, 92, 110))
+$btnOpenData = New-Button "Open Data Folder" 180 1020 150 34 ([System.Drawing.Color]::FromArgb(82, 92, 110))
+$btnClearPanelLog = New-Button "Clear Panel Log" 340 1020 145 34 ([System.Drawing.Color]::FromArgb(82, 92, 110))
 $form.Controls.AddRange(@($btnOpenLogs, $btnOpenData, $btnClearPanelLog))
 
 function Load-EmailSettingsIntoForm {
@@ -687,6 +965,7 @@ function Load-EmailSettingsIntoForm {
   $txtSmtpEmail.Text = $settings.SmtpEmail
   $txtAppPassword.Text = ""
   $chkAutoEmail.Checked = [bool]$settings.AutoEmailAlerts
+  $txtBackupDir.Text = if ([string]::IsNullOrWhiteSpace($settings.BackupDir)) { $script:DefaultBackupDir } else { $settings.BackupDir }
 
   if (Test-EmailSettingsConfigured $settings) {
     Set-EmailStatus "Gmail saved. Leave App Password blank to keep the saved password." $false
@@ -708,6 +987,16 @@ function Save-EmailSettingsFromForm {
   $script:LastAlertSignature = $null
   $script:LastAlertAt = $null
   Set-EmailStatus "Gmail saved. Email body will contain only the LAN URL." $false
+}
+
+function Save-BackupSettingsFromForm {
+  $folder = $txtBackupDir.Text.Trim()
+  if ([string]::IsNullOrWhiteSpace($folder)) {
+    $folder = $script:DefaultBackupDir
+  }
+  Save-BackupSettings -BackupDir $folder
+  $txtBackupDir.Text = $folder
+  Set-BackupStatus "Backup folder saved: $folder" $false
 }
 
 function Update-Panel {
@@ -825,6 +1114,105 @@ $btnSendUrlEmail.Add_Click({
     Write-PanelLog "Send URL failed: $($_.Exception.Message)"
     Set-EmailStatus "Send URL failed: $($_.Exception.Message)" $true
   }
+})
+
+$btnChooseBackupDir.Add_Click({
+  try {
+    $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dialog.Description = "Choose backup folder"
+    $dialog.SelectedPath = $txtBackupDir.Text
+    if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+      $txtBackupDir.Text = $dialog.SelectedPath
+      Save-BackupSettingsFromForm
+    }
+  }
+  catch {
+    Write-PanelLog "Choose backup folder failed: $($_.Exception.Message)"
+    Set-BackupStatus "Choose folder failed: $($_.Exception.Message)" $true
+  }
+})
+
+$btnBackupNow.Add_Click({
+  try {
+    Save-BackupSettingsFromForm
+    $backup = New-LocalBackup "manual"
+    Set-BackupStatus "Backup created: $backup" $false
+  }
+  catch {
+    Write-PanelLog "Backup failed: $($_.Exception.Message)"
+    Set-BackupStatus "Backup failed: $($_.Exception.Message)" $true
+  }
+})
+
+$btnRestoreBackup.Add_Click({
+  try {
+    $dialog = New-Object System.Windows.Forms.OpenFileDialog
+    $dialog.Title = "Choose POS backup ZIP"
+    $dialog.Filter = "POS backup (*.zip)|*.zip|All files (*.*)|*.*"
+    $dialog.InitialDirectory = Get-BackupDir
+    if ($dialog.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) {
+      return
+    }
+
+    $confirm = [System.Windows.Forms.MessageBox]::Show(
+      "Restore this backup? A safety backup of current data will be created first.",
+      "Restore backup",
+      [System.Windows.Forms.MessageBoxButtons]::YesNo,
+      [System.Windows.Forms.MessageBoxIcon]::Warning
+    )
+    if ($confirm -ne [System.Windows.Forms.DialogResult]::Yes) {
+      return
+    }
+
+    Restore-LocalBackup -BackupFile $dialog.FileName
+    Set-BackupStatus "Backup restored: $($dialog.FileName)" $false
+    Update-Panel
+  }
+  catch {
+    Write-PanelLog "Restore failed: $($_.Exception.Message)"
+    Set-BackupStatus "Restore failed: $($_.Exception.Message)" $true
+  }
+})
+
+$btnCheckUpdate.Add_Click({
+  try {
+    $status = Get-GitUpdateStatus
+    Set-UpdateStatus $status $false
+  }
+  catch {
+    Write-PanelLog "Check update failed: $($_.Exception.Message)"
+    Set-UpdateStatus "Check update failed: $($_.Exception.Message)" $true
+  }
+})
+
+$btnPullUpdate.Add_Click({
+  try {
+    $confirm = [System.Windows.Forms.MessageBox]::Show(
+      "Update from GitHub now? The panel will backup current data, pull latest code, build, and restart the server.",
+      "GitHub update",
+      [System.Windows.Forms.MessageBoxButtons]::YesNo,
+      [System.Windows.Forms.MessageBoxIcon]::Question
+    )
+    if ($confirm -ne [System.Windows.Forms.DialogResult]::Yes) {
+      return
+    }
+
+    Set-UpdateStatus "Updating... see data/logs/update.log" $false
+    Invoke-GitHubUpdate
+    Set-UpdateStatus "Update complete: $(Get-Date -Format "HH:mm:ss")" $false
+    Update-Panel
+  }
+  catch {
+    Write-PanelLog "Update failed: $($_.Exception.Message)"
+    Set-UpdateStatus "Update failed: $($_.Exception.Message)" $true
+  }
+})
+
+$btnOpenUpdateLog.Add_Click({
+  if (-not (Test-Path $script:UpdateLogPath)) {
+    New-Item -ItemType File -Force $script:UpdateLogPath | Out-Null
+  }
+  Start-Process notepad.exe $script:UpdateLogPath
 })
 
 $timer = New-Object System.Windows.Forms.Timer

@@ -76,7 +76,7 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    await requireUser(['OWNER']);
+    const currentUser = await requireUser(['OWNER']);
     const body = CreateUserSchema.parse(await req.json());
     if (isDevFileStoreEnabled()) {
       const result = await createDevUser({
@@ -84,6 +84,7 @@ export async function POST(req: Request) {
         display_name: body.display_name,
         role: body.role,
         password: body.password,
+        actorUserId: currentUser.id,
       });
       return NextResponse.json(result);
     }
@@ -108,6 +109,17 @@ export async function POST(req: Request) {
         body.role,
       ]
     );
+    await query(
+      `
+      insert into audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
+      values ($1, 'USER_UPSERT', 'user', $2, $3::jsonb)
+      `,
+      [
+        currentUser.id,
+        result.rows[0].id,
+        JSON.stringify({ email: result.rows[0].email, role: result.rows[0].role }),
+      ]
+    );
     return NextResponse.json({
       user: result.rows[0],
       tempPassword: body.password ? undefined : tempPassword,
@@ -119,10 +131,10 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
-    await requireUser(['OWNER']);
+    const currentUser = await requireUser(['OWNER']);
     const body = UpdateUserSchema.parse(await req.json());
     if (isDevFileStoreEnabled()) {
-      const result = await updateDevUser(body);
+      const result = await updateDevUser({ ...body, actorUserId: currentUser.id });
       return NextResponse.json(result);
     }
     const tempPassword = body.reset_password ? makeTempPassword() : null;
@@ -165,6 +177,22 @@ export async function PATCH(req: Request) {
           passwordHash,
         ]
       );
+      await client.query(
+        `
+        insert into audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, 'USER_UPDATE', 'user', $2, $3::jsonb)
+        `,
+        [
+          currentUser.id,
+          updated.rows[0].id,
+          JSON.stringify({
+            email: updated.rows[0].email,
+            role: updated.rows[0].role,
+            is_active: updated.rows[0].is_active,
+            reset_password: Boolean(body.reset_password),
+          }),
+        ]
+      );
       return updated.rows[0];
     });
 
@@ -176,17 +204,24 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    await requireUser(['OWNER']);
+    const currentUser = await requireUser(['OWNER']);
     const url = new URL(req.url);
     const id = url.searchParams.get('id');
     if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
     if (isDevFileStoreEnabled()) {
-      await deactivateDevUser(id);
+      await deactivateDevUser(id, currentUser.id);
       return NextResponse.json({ ok: true });
     }
     const current = await query<{ role: string }>(`select role from users where id = $1`, [id]);
     if (current.rows[0]?.role === 'OWNER') await ensureNotLastOwner(id);
     await query(`update users set is_active = false, updated_at = now() where id = $1`, [id]);
+    await query(
+      `
+      insert into audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
+      values ($1, 'USER_DEACTIVATE', 'user', $2, $3::jsonb)
+      `,
+      [currentUser.id, id, JSON.stringify({ role: current.rows[0]?.role ?? null })]
+    );
     return NextResponse.json({ ok: true });
   } catch (error) {
     return jsonError(error, 'Failed to deactivate user');

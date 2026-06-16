@@ -4,12 +4,13 @@ import Link from 'next/link';
 import { useI18n, type Language } from '@/lib/i18n';
 
 const languages: Array<{ value: Language; labelKey: 'thai' | 'english'; note: string }> = [
-  { value: 'th', labelKey: 'thai', note: 'ภาษาเริ่มต้น' },
+  { value: 'th', labelKey: 'thai', note: 'ค่าเริ่มต้น' },
   { value: 'en', labelKey: 'english', note: 'English interface' },
 ];
 
 export default function SettingsPage() {
-  const { language, setLanguage, t } = useI18n();
+  const { language, largeUi, setLanguage, setLargeUi, t } = useI18n();
+  const isThai = language === 'th';
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
@@ -49,7 +50,41 @@ export default function SettingsPage() {
           })}
         </div>
       </div>
+
+      <div className="card space-y-4 p-4">
+        <div>
+          <div className="text-base font-semibold">
+            {isThai ? 'โหมดใช้ง่ายสำหรับผู้สูงอายุ' : 'Elder-friendly mode'}
+          </div>
+          <div className="mt-1 text-sm text-zinc-500">
+            {isThai
+              ? 'เพิ่มขนาดตัวอักษร ปุ่ม และช่องกรอก เพื่อให้กดง่ายขึ้นบนมือถือและ iPad'
+              : 'Increase text, buttons, and inputs for easier use on phones and iPad.'}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setLargeUi(!largeUi)}
+          className={`flex w-full items-center justify-between rounded-lg border p-4 text-left transition ${
+            largeUi
+              ? 'border-emerald-600 bg-emerald-600 text-white'
+              : 'border-zinc-300 bg-white hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:bg-zinc-800'
+          }`}
+        >
+          <span>
+            <span className="block text-lg font-semibold">
+              {largeUi ? (isThai ? 'เปิดใช้งานอยู่' : 'Enabled') : isThai ? 'ปิดอยู่' : 'Disabled'}
+            </span>
+            <span className={`mt-1 block text-sm ${largeUi ? 'text-emerald-100' : 'text-zinc-500'}`}>
+              {isThai ? 'บันทึกเฉพาะเครื่องนี้' : 'Saved on this device only'}
+            </span>
+          </span>
+          <span className="rounded-full bg-black/10 px-3 py-1 text-sm font-semibold">
+            {largeUi ? 'ON' : 'OFF'}
+          </span>
+        </button>
+      </div>
     </div>
   );
 }
-

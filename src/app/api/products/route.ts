@@ -156,6 +156,23 @@ export async function POST(req: Request) {
           [branchId, inserted.rows[0].id, body.qty, user.id]
         );
       }
+      await client.query(
+        `
+        insert into audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, 'PRODUCT_CREATE', 'product', $2, $3::jsonb)
+        `,
+        [
+          user.id,
+          inserted.rows[0].id,
+          JSON.stringify({
+            name: body.name,
+            sku: body.sku ?? null,
+            category: body.category ?? null,
+            qty: body.qty,
+            sale_price: body.sale_price,
+          }),
+        ]
+      );
       return inserted.rows[0];
     });
 

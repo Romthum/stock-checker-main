@@ -100,6 +100,36 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           body.image_url ?? null,
         ]
       );
+      await client.query(
+        `
+        insert into audit_logs (actor_user_id, action, entity_type, entity_id, metadata)
+        values ($1, 'PRODUCT_UPDATE', 'product', $2, $3::jsonb)
+        `,
+        [
+          user.id,
+          row.id,
+          JSON.stringify({
+            name: updated.rows[0].name,
+            sku: updated.rows[0].sku,
+            before: {
+              name: row.name,
+              sku: row.sku,
+              category: row.category,
+              cost_price: Number(row.cost_price),
+              sale_price: Number(row.sale_price),
+              qty: row.qty,
+            },
+            after: {
+              name: updated.rows[0].name,
+              sku: updated.rows[0].sku,
+              category: updated.rows[0].category,
+              cost_price: Number(updated.rows[0].cost_price),
+              sale_price: Number(updated.rows[0].sale_price),
+              qty: updated.rows[0].qty,
+            },
+          }),
+        ]
+      );
       return updated.rows[0];
     });
 
@@ -123,7 +153,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     }
     const { id } = await params;
     if (isDevFileStoreEnabled()) {
-      await deleteDevProduct(id);
+      await deleteDevProduct(id, user.id);
       return NextResponse.json({ ok: true });
     }
 

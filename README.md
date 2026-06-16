@@ -196,6 +196,19 @@ scripts/windows/open-control-panel.cmd
 
 The control panel shows server status, LAN URLs, health check output, and the latest server logs. It also has buttons to start, stop, restart, open the web app, copy the LAN URL, and open the data/log folders.
 
+The control panel also includes local operations for the Mini PC:
+
+- `Backup Now`: creates a ZIP backup of `data/dev-store.json` and uploaded product images.
+- `Restore ZIP...`: restores a selected backup ZIP. The panel creates a safety backup before replacing current data.
+- `Check Update`: checks whether GitHub has newer commits.
+- `Pull + Build + Restart`: creates a backup, pulls latest `main`, installs dependencies, builds the app, and restarts the server.
+
+Update output is written to:
+
+```text
+data/logs/update.log
+```
+
 The control panel can also send the current LAN URL to Gmail. Fill in:
 
 - Send to Gmail: the address that should receive the URL
@@ -244,6 +257,16 @@ data/dev-store.json
 ```
 
 Set `ALLOW_DEV_FILE_STORE=false` if you want local development to require PostgreSQL.
+
+## Store Operations
+
+The app keeps an audit log for product creation, product edits, product deletion, stock adjustments, CSV imports, and staff user changes. Owners, managers, and auditors can open:
+
+```text
+/audit
+```
+
+The Settings page has an elder-friendly mode. It increases text, button, and input sizes on that device. On the product grid, the mode defaults to one column so staff can tap product cards more easily.
 
 ## Auto Start On Windows
 

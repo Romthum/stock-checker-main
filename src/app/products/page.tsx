@@ -24,7 +24,7 @@ const PAGE_SIZE = 25;
 
 export default function ProductsPage() {
   const { user, canManage, loading: authLoading } = useRole();
-  const { t } = useI18n();
+  const { largeUi, t } = useI18n();
   const [items, setItems] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [activeCat, setActiveCat] = useState('All');
@@ -36,7 +36,7 @@ export default function ProductsPage() {
   const [showScanner, setShowScanner] = useState(false);
   const [editItem, setEditItem] = useState<Product | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
-  const [columns, setColumns] = useState(2);
+  const [columns, setColumns] = useState(largeUi ? 1 : 2);
 
   async function loadCategories() {
     if (!user) return;
@@ -90,6 +90,10 @@ export default function ProductsPage() {
     loadProducts(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedQ, activeCat, user]);
+
+  useEffect(() => {
+    if (largeUi) setColumns(1);
+  }, [largeUi]);
 
   async function adjust(id: string, delta: number, reason: 'RESTOCK' | 'SALE' | 'ADJUST') {
     setUpdatingId(id);
@@ -148,13 +152,17 @@ export default function ProductsPage() {
         </div>
         <div className="flex gap-2">
           <input
-            className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+            className={`min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3 dark:border-zinc-700 dark:bg-zinc-900 ${
+              largeUi ? 'py-3 text-lg' : 'py-2'
+            }`}
             placeholder={t('searchProduct')}
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
           <button
-            className="rounded-lg bg-zinc-800 px-3 py-2 text-sm text-white dark:bg-zinc-700"
+            className={`rounded-lg bg-zinc-800 px-4 text-white dark:bg-zinc-700 ${
+              largeUi ? 'py-3 text-base' : 'py-2 text-sm'
+            }`}
             onClick={() => setShowScanner(true)}
           >
             {t('scan')}
@@ -168,7 +176,7 @@ export default function ProductsPage() {
                 key={value}
                 type="button"
                 onClick={() => setColumns(value)}
-                className={`h-9 w-10 rounded-md text-sm font-semibold ${
+                className={`${largeUi ? 'h-12 w-14 text-lg' : 'h-9 w-10 text-sm'} rounded-md font-semibold ${
                   columns === value
                     ? 'bg-blue-600 text-white'
                     : 'text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800'
@@ -186,7 +194,7 @@ export default function ProductsPage() {
           <button
             key={cat}
             onClick={() => setActiveCat(cat)}
-            className={`whitespace-nowrap rounded-full border px-3 py-1.5 text-sm ${
+            className={`whitespace-nowrap rounded-full border ${largeUi ? 'px-4 py-3 text-base' : 'px-3 py-1.5 text-sm'} ${
               activeCat === cat
                 ? 'border-blue-600 bg-blue-600 text-white'
                 : 'border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-900'
@@ -220,32 +228,32 @@ export default function ProductsPage() {
                   <div className="flex h-full items-center justify-center text-sm text-zinc-400">{t('product')}</div>
                 )}
               </div>
-              <div className={`${compactCards ? 'space-y-2 p-2' : 'space-y-3 p-3'}`}>
+              <div className={`${compactCards ? 'space-y-2 p-2' : largeUi ? 'space-y-4 p-4' : 'space-y-3 p-3'}`}>
                 <div>
-                  <div className={`${compactCards ? 'text-xs' : 'text-sm'} line-clamp-2 font-medium leading-snug`}>{item.name}</div>
-                  <div className="mt-1 truncate text-xs text-zinc-500">{item.sku || '-'}</div>
+                  <div className={`${compactCards ? 'text-xs' : largeUi ? 'text-xl' : 'text-sm'} line-clamp-2 font-medium leading-snug`}>{item.name}</div>
+                  <div className={`${largeUi ? 'text-base' : 'text-xs'} mt-1 truncate text-zinc-500`}>{item.sku || '-'}</div>
                 </div>
                 <div className={`flex ${compactCards ? 'flex-col gap-0.5' : 'items-center justify-between'}`}>
-                  <span className="text-xs text-zinc-500">{t('price')}</span>
-                  <span className={`${compactCards ? 'text-xs' : 'text-sm'} font-semibold`}>{item.sale_price.toLocaleString()} THB</span>
+                  <span className={`${largeUi ? 'text-base' : 'text-xs'} text-zinc-500`}>{t('price')}</span>
+                  <span className={`${compactCards ? 'text-xs' : largeUi ? 'text-xl' : 'text-sm'} font-semibold`}>{item.sale_price.toLocaleString()} THB</span>
                 </div>
                 <div className={`flex ${compactCards ? 'flex-col gap-0.5' : 'items-center justify-between'}`}>
-                  <span className="text-xs text-zinc-500">{t('stock')}</span>
-                  <span className={item.qty <= 5 ? 'font-semibold text-amber-600' : 'font-semibold'}>
+                  <span className={`${largeUi ? 'text-base' : 'text-xs'} text-zinc-500`}>{t('stock')}</span>
+                  <span className={`${largeUi ? 'text-2xl' : ''} ${item.qty <= 5 ? 'font-semibold text-amber-600' : 'font-semibold'}`}>
                     {item.qty}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     disabled={updatingId === item.id}
-                    className={`${compactCards ? 'px-2 py-2 text-xs' : 'px-3 py-2 text-sm'} rounded-lg bg-zinc-200 hover:bg-zinc-300 disabled:opacity-60 dark:bg-zinc-800 dark:hover:bg-zinc-700`}
+                    className={`${compactCards ? 'px-2 py-2 text-xs' : largeUi ? 'px-4 py-4 text-2xl' : 'px-3 py-2 text-sm'} rounded-lg bg-zinc-200 hover:bg-zinc-300 disabled:opacity-60 dark:bg-zinc-800 dark:hover:bg-zinc-700`}
                     onClick={() => adjust(item.id, 1, 'RESTOCK')}
                   >
                     +1
                   </button>
                   <button
                     disabled={updatingId === item.id}
-                    className={`${compactCards ? 'px-2 py-2 text-xs' : 'px-3 py-2 text-sm'} rounded-lg bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-60`}
+                    className={`${compactCards ? 'px-2 py-2 text-xs' : largeUi ? 'px-4 py-4 text-2xl' : 'px-3 py-2 text-sm'} rounded-lg bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-60`}
                     onClick={() => adjust(item.id, -1, 'SALE')}
                   >
                     -1
@@ -253,7 +261,7 @@ export default function ProductsPage() {
                 </div>
                 {canManage ? (
                   <button
-                    className={`${compactCards ? 'px-2 py-2 text-xs' : 'px-3 py-2 text-sm'} w-full rounded-lg border border-zinc-300 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800`}
+                    className={`${compactCards ? 'px-2 py-2 text-xs' : largeUi ? 'px-4 py-3 text-lg' : 'px-3 py-2 text-sm'} w-full rounded-lg border border-zinc-300 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800`}
                     onClick={() => setEditItem(item)}
                   >
                     {t('edit')}

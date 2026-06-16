@@ -29,3 +29,26 @@ html,
 body {
   height: 100%;
 }
+
+html.large-ui body {
+  font-size: 18px;
+}
+
+html.large-ui button,
+html.large-ui input,
+html.large-ui select,
+html.large-ui textarea,
+html.large-ui a {
+  font-size: 1.05rem;
+}
+
+html.large-ui button,
+html.large-ui input,
+html.large-ui select,
+html.large-ui textarea {
+  min-height: 48px;
+}
+
+html.large-ui .card {
+  @apply border-2;
+}

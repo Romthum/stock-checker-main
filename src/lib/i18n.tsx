@@ -343,24 +343,33 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
 
 type I18nContextValue = {
   language: Language;
+  largeUi: boolean;
   setLanguage: (language: Language) => void;
+  setLargeUi: (enabled: boolean) => void;
   t: (key: TranslationKey, vars?: Record<string, string | number>) => string;
 };
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguageState] = useState<Language>(() => {
-    if (typeof window === 'undefined') return 'th';
-    const saved = window.localStorage.getItem('pos_language');
-    return saved === 'th' || saved === 'en' ? saved : 'th';
-  });
+  const [language, setLanguageState] = useState<Language>('th');
+  const [largeUi, setLargeUiState] = useState<boolean>(false);
 
   const value = useMemo<I18nContextValue>(() => {
     function setLanguage(nextLanguage: Language) {
       setLanguageState(nextLanguage);
-      window.localStorage.setItem('pos_language', nextLanguage);
-      document.documentElement.lang = nextLanguage;
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('pos_language', nextLanguage);
+        document.documentElement.lang = nextLanguage;
+      }
+    }
+
+    function setLargeUi(enabled: boolean) {
+      setLargeUiState(enabled);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('pos_large_ui', String(enabled));
+        document.documentElement.classList.toggle('large-ui', enabled);
+      }
     }
 
     function t(key: TranslationKey, vars?: Record<string, string | number>) {
@@ -373,12 +382,24 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       return text;
     }
 
-    return { language, setLanguage, t };
-  }, [language]);
+    return { language, largeUi, setLanguage, setLargeUi, t };
+  }, [language, largeUi]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const savedLanguage = window.localStorage.getItem('pos_language');
+      if (savedLanguage === 'th' || savedLanguage === 'en') {
+        setLanguageState(savedLanguage);
+      }
+      setLargeUiState(window.localStorage.getItem('pos_large_ui') === 'true');
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     document.documentElement.lang = language;
-  }, [language]);
+    document.documentElement.classList.toggle('large-ui', largeUi);
+  }, [language, largeUi]);
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

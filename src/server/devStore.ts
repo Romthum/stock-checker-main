@@ -41,10 +41,21 @@ export type DevUser = {
   updated_at: string;
 };
 
+export type DevAuditLog = {
+  id: string;
+  actor_user_id: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
 type DevStoreData = {
   products: DevProduct[];
   movements: DevMovement[];
   users: DevUser[];
+  auditLogs: DevAuditLog[];
 };
 
 type ProductInput = {
@@ -81,10 +92,11 @@ async function readStore(): Promise<DevStoreData> {
       products: Array.isArray(parsed.products) ? parsed.products : [],
       movements: Array.isArray(parsed.movements) ? parsed.movements : [],
       users: Array.isArray(parsed.users) ? parsed.users : [],
+      auditLogs: Array.isArray(parsed.auditLogs) ? parsed.auditLogs : [],
     });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-    return { products: [], movements: [], users: [] };
+    return { products: [], movements: [], users: [], auditLogs: [] };
   }
 }
 
@@ -117,6 +129,12 @@ function normalizeStoreData(data: DevStoreData): DevStoreData {
     users: data.users.map((user) => ({
       ...user,
       display_name: cleanRequiredText(user.display_name),
+    })),
+    auditLogs: (data.auditLogs ?? []).map((log) => ({
+      ...log,
+      actor_user_id: log.actor_user_id ?? null,
+      entity_id: log.entity_id ?? null,
+      metadata: log.metadata && typeof log.metadata === 'object' ? log.metadata : {},
     })),
   };
 }
@@ -153,6 +171,41 @@ function publicUser(user: DevUser) {
     role: user.role,
     is_active: user.is_active,
     created_at: user.created_at,
+  };
+}
+
+function addAuditLog(
+  store: DevStoreData,
+  input: {
+    actorUserId?: string | null;
+    action: string;
+    entityType: string;
+    entityId?: string | null;
+    metadata?: Record<string, unknown>;
+  }
+) {
+  store.auditLogs.push({
+    id: randomUUID(),
+    actor_user_id: input.actorUserId ?? null,
+    action: input.action,
+    entity_type: input.entityType,
+    entity_id: input.entityId ?? null,
+    metadata: input.metadata ?? {},
+    created_at: new Date().toISOString(),
+  });
+}
+
+function publicAuditLog(log: DevAuditLog, usersById: Map<string, DevUser>) {
+  const actor = log.actor_user_id ? usersById.get(log.actor_user_id) : null;
+  return {
+    id: log.id,
+    actor_user_id: log.actor_user_id,
+    actor_name: actor?.display_name ?? actor?.email ?? null,
+    action: log.action,
+    entity_type: log.entity_type,
+    entity_id: log.entity_id,
+    metadata: log.metadata ?? {},
+    created_at: log.created_at,
   };
 }
 
@@ -203,6 +256,7 @@ export async function createDevUser(input: {
   display_name?: string | null;
   role: DevRole;
   password?: string | null;
+  actorUserId?: string | null;
 }) {
   const store = await readStore();
   const email = input.email.trim().toLowerCase();
@@ -217,6 +271,13 @@ export async function createDevUser(input: {
     existing.role = input.role;
     existing.is_active = true;
     existing.updated_at = now;
+    addAuditLog(store, {
+      actorUserId: input.actorUserId,
+      action: 'USER_UPSERT',
+      entityType: 'user',
+      entityId: existing.id,
+      metadata: { email: existing.email, role: existing.role },
+    });
     await writeStore(store);
     return { user: publicUser(existing), tempPassword: input.password ? undefined : tempPassword };
   }
@@ -232,6 +293,13 @@ export async function createDevUser(input: {
     updated_at: now,
   };
   store.users.push(user);
+  addAuditLog(store, {
+    actorUserId: input.actorUserId,
+    action: 'USER_CREATE',
+    entityType: 'user',
+    entityId: user.id,
+    metadata: { email: user.email, role: user.role },
+  });
   await writeStore(store);
   return { user: publicUser(user), tempPassword: input.password ? undefined : tempPassword };
 }
@@ -242,6 +310,7 @@ export async function updateDevUser(input: {
   role?: DevRole;
   is_active?: boolean;
   reset_password?: boolean;
+  actorUserId?: string | null;
 }) {
   const store = await readStore();
   const user = store.users.find((row) => row.id === input.id);
@@ -258,11 +327,23 @@ export async function updateDevUser(input: {
   if (input.role) user.role = input.role;
   if (input.is_active !== undefined) user.is_active = input.is_active;
   user.updated_at = new Date().toISOString();
+  addAuditLog(store, {
+    actorUserId: input.actorUserId,
+    action: 'USER_UPDATE',
+    entityType: 'user',
+    entityId: user.id,
+    metadata: {
+      email: user.email,
+      role: user.role,
+      is_active: user.is_active,
+      reset_password: Boolean(input.reset_password),
+    },
+  });
   await writeStore(store);
   return { user: publicUser(user), tempPassword };
 }
 
-export async function deactivateDevUser(id: string) {
+export async function deactivateDevUser(id: string, actorUserId?: string | null) {
   const store = await readStore();
   const user = store.users.find((row) => row.id === id);
   if (!user) {
@@ -272,6 +353,13 @@ export async function deactivateDevUser(id: string) {
   }
   user.is_active = false;
   user.updated_at = new Date().toISOString();
+  addAuditLog(store, {
+    actorUserId,
+    action: 'USER_DEACTIVATE',
+    entityType: 'user',
+    entityId: user.id,
+    metadata: { email: user.email, role: user.role },
+  });
   await writeStore(store);
 }
 
@@ -371,6 +459,19 @@ export async function createDevProduct(input: ProductInput) {
     updated_at: now,
   };
   store.products.push(product);
+  addAuditLog(store, {
+    actorUserId: input.created_by,
+    action: 'PRODUCT_CREATE',
+    entityType: 'product',
+    entityId: product.id,
+    metadata: {
+      name: product.name,
+      sku: product.sku,
+      category: product.category,
+      qty: product.qty,
+      sale_price: product.sale_price,
+    },
+  });
 
   if (product.qty > 0) {
     store.movements.push({
@@ -408,6 +509,14 @@ export async function updateDevProduct(id: string, input: ProductUpdate, actorUs
   }
 
   const now = new Date().toISOString();
+  const before = {
+    name: product.name,
+    sku: product.sku,
+    category: product.category,
+    cost_price: product.cost_price,
+    sale_price: product.sale_price,
+    qty: product.qty,
+  };
   const nextQty = input.qty === undefined || input.qty === null ? product.qty : Number(input.qty);
   const delta = nextQty - product.qty;
 
@@ -432,11 +541,31 @@ export async function updateDevProduct(id: string, input: ProductUpdate, actorUs
     });
   }
 
+  addAuditLog(store, {
+    actorUserId,
+    action: 'PRODUCT_UPDATE',
+    entityType: 'product',
+    entityId: product.id,
+    metadata: {
+      name: product.name,
+      sku: product.sku,
+      before,
+      after: {
+        name: product.name,
+        sku: product.sku,
+        category: product.category,
+        cost_price: product.cost_price,
+        sale_price: product.sale_price,
+        qty: product.qty,
+      },
+    },
+  });
+
   await writeStore(store);
   return publicProduct(product);
 }
 
-export async function deleteDevProduct(id: string) {
+export async function deleteDevProduct(id: string, actorUserId?: string | null) {
   const store = await readStore();
   const product = store.products.find((row) => row.id === id && row.is_active);
   if (!product) {
@@ -446,6 +575,13 @@ export async function deleteDevProduct(id: string) {
   }
   product.is_active = false;
   product.updated_at = new Date().toISOString();
+  addAuditLog(store, {
+    actorUserId,
+    action: 'PRODUCT_DELETE',
+    entityType: 'product',
+    entityId: product.id,
+    metadata: { name: product.name, sku: product.sku },
+  });
   await writeStore(store);
 }
 
@@ -476,6 +612,7 @@ export async function adjustDevStock({
     throw error;
   }
   const now = new Date().toISOString();
+  const previousQty = product.qty;
   product.qty = nextQty;
   product.updated_at = now;
   store.movements.push({
@@ -487,8 +624,32 @@ export async function adjustDevStock({
     created_by: actorUserId ?? null,
     created_at: now,
   });
+  addAuditLog(store, {
+    actorUserId,
+    action: 'STOCK_ADJUST',
+    entityType: 'product',
+    entityId: product.id,
+    metadata: {
+      name: product.name,
+      sku: product.sku,
+      delta,
+      reason,
+      note: note ?? null,
+      previous_qty: previousQty,
+      next_qty: nextQty,
+    },
+  });
   await writeStore(store);
   return { qty: product.qty };
+}
+
+export async function listDevAuditLogs(limit: number) {
+  const store = await readStore();
+  const usersById = new Map(store.users.map((user) => [user.id, user]));
+  return store.auditLogs
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))
+    .slice(0, limit)
+    .map((log) => publicAuditLog(log, usersById));
 }
 
 export async function listDevMovements(from: string, to: string, limit: number) {
@@ -534,6 +695,14 @@ export async function importDevProducts(rows: ProductInput[], actorUserId?: stri
     }
     imported += 1;
   }
+  const store = await readStore();
+  addAuditLog(store, {
+    actorUserId,
+    action: 'PRODUCT_IMPORT',
+    entityType: 'product',
+    metadata: { rows: imported },
+  });
+  await writeStore(store);
   return imported;
 }
 
