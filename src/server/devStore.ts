@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import bcrypt from 'bcryptjs';
+import { isUnreadableThaiFragment, repairThaiMojibake } from './textEncoding';
 
 type DevRole = 'OWNER' | 'MANAGER' | 'CASHIER' | 'INVENTORY_STAFF' | 'AUDITOR' | 'STAFF';
 
@@ -76,11 +77,11 @@ async function readStore(): Promise<DevStoreData> {
   try {
     const raw = await fs.readFile(storePath, 'utf8');
     const parsed = JSON.parse(raw.replace(/^\uFEFF/, '')) as DevStoreData;
-    return {
+    return normalizeStoreData({
       products: Array.isArray(parsed.products) ? parsed.products : [],
       movements: Array.isArray(parsed.movements) ? parsed.movements : [],
       users: Array.isArray(parsed.users) ? parsed.users : [],
-    };
+    });
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     return { products: [], movements: [], users: [] };
@@ -93,16 +94,43 @@ async function writeStore(data: DevStoreData) {
 }
 
 function cleanText(value?: string | null) {
-  const trimmed = value?.trim();
+  const trimmed = value ? repairThaiMojibake(value).trim() : value;
   return trimmed ? trimmed : null;
 }
 
+function cleanRequiredText(value: string) {
+  return repairThaiMojibake(value).trim();
+}
+
+function normalizeStoreData(data: DevStoreData): DevStoreData {
+  return {
+    products: data.products.map((product) => ({
+      ...product,
+      name: cleanRequiredText(product.name),
+      sku: cleanText(product.sku),
+      category: cleanText(product.category),
+    })),
+    movements: data.movements.map((movement) => ({
+      ...movement,
+      note: cleanText(movement.note),
+    })),
+    users: data.users.map((user) => ({
+      ...user,
+      display_name: cleanRequiredText(user.display_name),
+    })),
+  };
+}
+
 function publicProduct(product: DevProduct) {
+  const name = cleanRequiredText(product.name);
+  const sku = cleanText(product.sku);
+  const category = cleanText(product.category);
+
   return {
     id: product.id,
-    name: product.name,
-    sku: product.sku,
-    category: product.category,
+    name: isUnreadableThaiFragment(name) ? `สินค้า ${sku ?? product.id.slice(0, 8)}` : name,
+    sku,
+    category: category && !isUnreadableThaiFragment(category) ? category : null,
     cost_price: product.cost_price,
     sale_price: product.sale_price,
     qty: product.qty,
@@ -265,7 +293,8 @@ export async function listDevCategories() {
     new Set(
       store.products
         .filter((product) => product.is_active && product.category)
-        .map((product) => product.category as string)
+        .map((product) => cleanText(product.category))
+        .filter((category): category is string => !!category && !isUnreadableThaiFragment(category))
     )
   ).sort((a, b) => a.localeCompare(b));
 }
@@ -330,7 +359,7 @@ export async function createDevProduct(input: ProductInput) {
   const now = new Date().toISOString();
   const product: DevProduct = {
     id: randomUUID(),
-    name: input.name.trim(),
+    name: cleanRequiredText(input.name),
     sku,
     category: cleanText(input.category),
     cost_price: Number(input.cost_price ?? 0),
@@ -382,7 +411,7 @@ export async function updateDevProduct(id: string, input: ProductUpdate, actorUs
   const nextQty = input.qty === undefined || input.qty === null ? product.qty : Number(input.qty);
   const delta = nextQty - product.qty;
 
-  product.name = input.name?.trim() || product.name;
+  product.name = input.name ? cleanRequiredText(input.name) || product.name : product.name;
   product.sku = sku;
   product.category = input.category !== undefined ? cleanText(input.category) : product.category;
   product.cost_price = input.cost_price === undefined || input.cost_price === null ? product.cost_price : Number(input.cost_price);
