@@ -182,6 +182,32 @@ Show the LAN URL to open from another device:
 npm run lan:url
 ```
 
+Open a small Windows control panel on the Mini PC:
+
+```powershell
+npm run panel
+```
+
+Or double-click:
+
+```text
+scripts/windows/open-control-panel.cmd
+```
+
+The control panel shows server status, LAN URLs, health check output, and the latest server logs. It also has buttons to start, stop, restart, open the web app, copy the LAN URL, and open the data/log folders.
+
+Create a Desktop shortcut:
+
+```powershell
+.\scripts\windows\install-control-panel-shortcut.ps1
+```
+
+Open the control panel automatically after Windows login:
+
+```powershell
+.\scripts\windows\install-control-panel-shortcut.ps1 -Location Startup
+```
+
 If PostgreSQL is not running yet, development mode allows a temporary fallback owner login:
 
 ```text

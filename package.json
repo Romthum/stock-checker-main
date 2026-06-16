@@ -6,6 +6,7 @@
     "dev": "next dev",
     "dev:lan": "powershell -ExecutionPolicy Bypass -File scripts/windows/dev-lan.ps1",
     "lan:url": "powershell -ExecutionPolicy Bypass -File scripts/windows/show-lan-url.ps1",
+    "panel": "powershell -STA -ExecutionPolicy Bypass -File scripts/windows/pos-control-panel.ps1",
     "data:repair-encoding": "node scripts/repair-dev-store-encoding.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "db:create-admin": "node scripts/create-admin.mjs",
