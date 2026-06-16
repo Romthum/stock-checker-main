@@ -17,6 +17,26 @@ type UserRow = {
 
 const roles: Role[] = ['OWNER', 'MANAGER', 'CASHIER', 'INVENTORY_STAFF', 'AUDITOR', 'STAFF'];
 
+type ApiErrorResponse = {
+  error?: string;
+  details?: Array<{
+    path?: Array<string | number>;
+    message?: string;
+  }>;
+};
+
+function getApiError(json: ApiErrorResponse, fallback: string) {
+  if (json.details?.length) {
+    return json.details
+      .map((detail) => {
+        const field = detail.path?.join('.') || 'field';
+        return `${field}: ${detail.message ?? 'Invalid value'}`;
+      })
+      .join(', ');
+  }
+  return json.error || fallback;
+}
+
 export default function UsersPage() {
   const { role, loading } = useRole();
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -35,7 +55,7 @@ export default function UsersPage() {
     const res = await fetch('/api/admin/users', { cache: 'no-store' });
     const json = await res.json();
     if (!res.ok) {
-      setMessage(json.error || 'Failed to load users');
+      setMessage(getApiError(json, 'Failed to load users'));
       return;
     }
     setUsers(json.users ?? []);
@@ -46,6 +66,11 @@ export default function UsersPage() {
   }, [canView]);
 
   async function createUser() {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail || !normalizedEmail.includes('@')) {
+      setMessage('Please enter a valid email address.');
+      return;
+    }
     setBusy(true);
     setMessage('');
     setTempPassword('');
@@ -54,13 +79,13 @@ export default function UsersPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email,
-          display_name: displayName || email,
+          email: normalizedEmail,
+          display_name: displayName.trim() || normalizedEmail,
           role: newRole,
         }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Create failed');
+      if (!res.ok) throw new Error(getApiError(json, 'Create failed'));
       setEmail('');
       setDisplayName('');
       setTempPassword(json.tempPassword ?? '');
@@ -83,7 +108,7 @@ export default function UsersPage() {
         body: JSON.stringify(payload),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Update failed');
+      if (!res.ok) throw new Error(getApiError(json, 'Update failed'));
       if (json.tempPassword) setTempPassword(json.tempPassword);
       await load();
     } catch (err) {
@@ -100,7 +125,7 @@ export default function UsersPage() {
     try {
       const res = await fetch(`/api/admin/users?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Deactivate failed');
+      if (!res.ok) throw new Error(getApiError(json, 'Deactivate failed'));
       await load();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Deactivate failed');

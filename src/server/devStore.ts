@@ -1,6 +1,9 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import bcrypt from 'bcryptjs';
+
+type DevRole = 'OWNER' | 'MANAGER' | 'CASHIER' | 'INVENTORY_STAFF' | 'AUDITOR' | 'STAFF';
 
 export type DevProduct = {
   id: string;
@@ -26,9 +29,21 @@ export type DevMovement = {
   created_at: string;
 };
 
+export type DevUser = {
+  id: string;
+  email: string;
+  password_hash: string;
+  display_name: string;
+  role: DevRole;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
 type DevStoreData = {
   products: DevProduct[];
   movements: DevMovement[];
+  users: DevUser[];
 };
 
 type ProductInput = {
@@ -64,10 +79,11 @@ async function readStore(): Promise<DevStoreData> {
     return {
       products: Array.isArray(parsed.products) ? parsed.products : [],
       movements: Array.isArray(parsed.movements) ? parsed.movements : [],
+      users: Array.isArray(parsed.users) ? parsed.users : [],
     };
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-    return { products: [], movements: [] };
+    return { products: [], movements: [], users: [] };
   }
 }
 
@@ -99,6 +115,136 @@ function sortProducts(a: DevProduct, b: DevProduct) {
   const name = a.name.localeCompare(b.name);
   if (name !== 0) return name;
   return a.id.localeCompare(b.id);
+}
+
+function publicUser(user: DevUser) {
+  return {
+    id: user.id,
+    email: user.email,
+    display_name: user.display_name,
+    role: user.role,
+    is_active: user.is_active,
+    created_at: user.created_at,
+  };
+}
+
+function makeTempPassword() {
+  return `Temp-${randomUUID().slice(0, 8)}!1`;
+}
+
+export async function listDevUsers(fallbackOwner?: {
+  id: string;
+  email: string;
+  display_name: string;
+  role: DevRole;
+}) {
+  const store = await readStore();
+  const users = store.users.map(publicUser);
+  if (fallbackOwner && !users.some((user) => user.id === fallbackOwner.id)) {
+    users.unshift({
+      id: fallbackOwner.id,
+      email: fallbackOwner.email,
+      display_name: fallbackOwner.display_name,
+      role: fallbackOwner.role,
+      is_active: true,
+      created_at: new Date(0).toISOString(),
+    });
+  }
+  return users;
+}
+
+export async function findDevUserById(id: string) {
+  const store = await readStore();
+  const user = store.users.find((row) => row.id === id && row.is_active);
+  return user ? publicUser(user) : null;
+}
+
+export async function findDevUserByLogin(login: string, password: string) {
+  const store = await readStore();
+  const normalizedLogin = login.trim().toLowerCase();
+  const user = store.users.find(
+    (row) => row.is_active && row.email.toLowerCase() === normalizedLogin
+  );
+  if (!user) return null;
+  const ok = await bcrypt.compare(password, user.password_hash);
+  return ok ? publicUser(user) : null;
+}
+
+export async function createDevUser(input: {
+  email: string;
+  display_name?: string | null;
+  role: DevRole;
+  password?: string | null;
+}) {
+  const store = await readStore();
+  const email = input.email.trim().toLowerCase();
+  const now = new Date().toISOString();
+  const tempPassword = input.password?.trim() || makeTempPassword();
+  const passwordHash = await bcrypt.hash(tempPassword, 12);
+  const existing = store.users.find((user) => user.email.toLowerCase() === email);
+
+  if (existing) {
+    existing.password_hash = passwordHash;
+    existing.display_name = cleanText(input.display_name) ?? email;
+    existing.role = input.role;
+    existing.is_active = true;
+    existing.updated_at = now;
+    await writeStore(store);
+    return { user: publicUser(existing), tempPassword: input.password ? undefined : tempPassword };
+  }
+
+  const user: DevUser = {
+    id: randomUUID(),
+    email,
+    password_hash: passwordHash,
+    display_name: cleanText(input.display_name) ?? email,
+    role: input.role,
+    is_active: true,
+    created_at: now,
+    updated_at: now,
+  };
+  store.users.push(user);
+  await writeStore(store);
+  return { user: publicUser(user), tempPassword: input.password ? undefined : tempPassword };
+}
+
+export async function updateDevUser(input: {
+  id: string;
+  display_name?: string | null;
+  role?: DevRole;
+  is_active?: boolean;
+  reset_password?: boolean;
+}) {
+  const store = await readStore();
+  const user = store.users.find((row) => row.id === input.id);
+  if (!user) {
+    const error = new Error('User not found');
+    (error as Error & { status?: number }).status = 404;
+    throw error;
+  }
+  const tempPassword = input.reset_password ? makeTempPassword() : null;
+  if (tempPassword) {
+    user.password_hash = await bcrypt.hash(tempPassword, 12);
+  }
+  if (input.display_name !== undefined) user.display_name = cleanText(input.display_name) ?? user.email;
+  if (input.role) user.role = input.role;
+  if (input.is_active !== undefined) user.is_active = input.is_active;
+  user.updated_at = new Date().toISOString();
+  await writeStore(store);
+  return { user: publicUser(user), tempPassword };
+}
+
+export async function deactivateDevUser(id: string) {
+  const store = await readStore();
+  const user = store.users.find((row) => row.id === id);
+  if (!user) {
+    const error = new Error('User not found');
+    (error as Error & { status?: number }).status = 404;
+    throw error;
+  }
+  user.is_active = false;
+  user.updated_at = new Date().toISOString();
+  await writeStore(store);
 }
 
 export async function getDevStats() {

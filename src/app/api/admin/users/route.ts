@@ -3,6 +3,13 @@ import crypto from 'node:crypto';
 import { z } from 'zod';
 import { hashPassword, requireUser } from '@/server/auth';
 import { query, tx } from '@/server/db';
+import {
+  createDevUser,
+  deactivateDevUser,
+  isDevFileStoreEnabled,
+  listDevUsers,
+  updateDevUser,
+} from '@/server/devStore';
 import { jsonError } from '@/server/http';
 
 export const runtime = 'nodejs';
@@ -11,15 +18,15 @@ export const dynamic = 'force-dynamic';
 const RoleSchema = z.enum(['OWNER', 'MANAGER', 'CASHIER', 'INVENTORY_STAFF', 'AUDITOR', 'STAFF']);
 
 const CreateUserSchema = z.object({
-  email: z.string().email(),
-  display_name: z.string().trim().min(1).optional(),
+  email: z.string().trim().toLowerCase().email(),
+  display_name: z.string().trim().optional().nullable(),
   role: RoleSchema.default('STAFF'),
-  password: z.string().min(8).optional(),
+  password: z.string().trim().min(8).optional().nullable(),
 });
 
 const UpdateUserSchema = z.object({
   id: z.string().uuid(),
-  display_name: z.string().trim().min(1).optional(),
+  display_name: z.string().trim().optional().nullable(),
   role: RoleSchema.optional(),
   is_active: z.boolean().optional(),
   reset_password: z.boolean().optional(),
@@ -52,7 +59,10 @@ async function ensureNotLastOwner(userId: string) {
 
 export async function GET() {
   try {
-    await requireUser(['OWNER', 'MANAGER']);
+    const currentUser = await requireUser(['OWNER', 'MANAGER']);
+    if (isDevFileStoreEnabled()) {
+      return NextResponse.json({ users: await listDevUsers(currentUser) });
+    }
     const result = await query<UserRow>(`
       select id, email, display_name, role, is_active, created_at
       from users
@@ -68,6 +78,15 @@ export async function POST(req: Request) {
   try {
     await requireUser(['OWNER']);
     const body = CreateUserSchema.parse(await req.json());
+    if (isDevFileStoreEnabled()) {
+      const result = await createDevUser({
+        email: body.email,
+        display_name: body.display_name,
+        role: body.role,
+        password: body.password,
+      });
+      return NextResponse.json(result);
+    }
     const tempPassword = body.password ?? makeTempPassword();
     const passwordHash = await hashPassword(tempPassword);
     const result = await query<UserRow>(
@@ -85,7 +104,7 @@ export async function POST(req: Request) {
       [
         body.email.toLowerCase(),
         passwordHash,
-        body.display_name ?? body.email.toLowerCase(),
+        body.display_name || body.email.toLowerCase(),
         body.role,
       ]
     );
@@ -102,6 +121,10 @@ export async function PATCH(req: Request) {
   try {
     await requireUser(['OWNER']);
     const body = UpdateUserSchema.parse(await req.json());
+    if (isDevFileStoreEnabled()) {
+      const result = await updateDevUser(body);
+      return NextResponse.json(result);
+    }
     const tempPassword = body.reset_password ? makeTempPassword() : null;
     const passwordHash = tempPassword ? await hashPassword(tempPassword) : null;
 
@@ -157,6 +180,10 @@ export async function DELETE(req: Request) {
     const url = new URL(req.url);
     const id = url.searchParams.get('id');
     if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+    if (isDevFileStoreEnabled()) {
+      await deactivateDevUser(id);
+      return NextResponse.json({ ok: true });
+    }
     const current = await query<{ role: string }>(`select role from users where id = $1`, [id]);
     if (current.rows[0]?.role === 'OWNER') await ensureNotLastOwner(id);
     await query(`update users set is_active = false, updated_at = now() where id = $1`, [id]);

@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import {
   createSessionToken,
-  DEV_FALLBACK_USER_ID,
   getDevFallbackPassword,
   getDevFallbackUser,
   isDevAuthFallbackEnabled,
@@ -11,6 +10,7 @@ import {
   verifyPassword,
 } from '@/server/auth';
 import { query } from '@/server/db';
+import { findDevUserByLogin, isDevFileStoreEnabled } from '@/server/devStore';
 import { jsonError } from '@/server/http';
 
 export const runtime = 'nodejs';
@@ -30,6 +30,10 @@ type LoginRow = {
 };
 
 async function fallbackLogin(login: string, password: string) {
+  if (isDevFileStoreEnabled()) {
+    const devUser = await findDevUserByLogin(login, password);
+    if (devUser) return devUser;
+  }
   if (!isDevAuthFallbackEnabled()) return null;
   const fallbackUser = getDevFallbackUser();
   const allowedLogin = [fallbackUser.email, 'owner'].map((item) => item.toLowerCase());
@@ -70,7 +74,7 @@ export async function POST(req: Request) {
     } catch (error) {
       const devUser = await fallbackLogin(login, body.password);
       if (!devUser) throw error;
-      user = { ...devUser, id: DEV_FALLBACK_USER_ID };
+      user = devUser;
     }
 
     if (!user) {

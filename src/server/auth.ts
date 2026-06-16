@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs';
 import { jwtVerify, SignJWT } from 'jose';
 import { cookies } from 'next/headers';
 import { query } from './db';
+import { findDevUserById, isDevFileStoreEnabled } from './devStore';
 
 export type Role = 'OWNER' | 'MANAGER' | 'CASHIER' | 'INVENTORY_STAFF' | 'AUDITOR' | 'STAFF';
 
@@ -82,6 +83,10 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     if (!userId) return null;
     if (isDevAuthFallbackEnabled() && userId === DEV_FALLBACK_USER_ID) {
       return getDevFallbackUser();
+    }
+    if (isDevFileStoreEnabled()) {
+      const devUser = await findDevUserById(userId);
+      if (devUser) return devUser;
     }
     const result = await query<AuthUser>(
       `
